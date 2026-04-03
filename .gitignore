@@ -1,0 +1,58 @@
+# ============================================================
+# .gitignore — Projet Django / Gestion Intégrée Multi-Sites
+# ============================================================
+
+# --- Variables d'environnement (NE JAMAIS versionner) ---
+.env
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+*.whl
+
+# --- Environnement virtuel ---
+venv/
+env/
+drf/
+.venv/
+.env/
+.drf/
+
+# --- Django ---
+staticfiles/
+media/
+db.sqlite3
+*.sqlite3
+
+# --- Logs ---
+*.log
+logs/
+
+# --- IDE ---
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# --- Tests & coverage ---
+.coverage
+htmlcov/
+.pytest_cache/
+coverage.xml
+
+# --- Docker ---
+*.env.docker
+
+# --- Divers ---
+*.bak
+*.tmp
