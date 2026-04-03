@@ -80,7 +80,7 @@ jobs:
 
       - name: Lancer les migrations
         env:
-          DJANGO_SETTINGS_MODULE: config.settings.dev
+          DJANGO_SETTINGS_MODULE: config.settings
           SECRET_KEY: ci-secret-key-not-used-in-prod
           DB_NAME: gestion_test_db
           DB_USER: gestion_user
@@ -92,7 +92,7 @@ jobs:
 
       - name: Lancer les tests
         env:
-          DJANGO_SETTINGS_MODULE: config.settings.dev
+          DJANGO_SETTINGS_MODULE: config.settings
           SECRET_KEY: ci-secret-key-not-used-in-prod
           DB_NAME: gestion_test_db
           DB_USER: gestion_user
@@ -103,7 +103,7 @@ jobs:
         run: |
           pytest \
             --tb=short \
-            --ds=config.settings.dev \
+            --ds=config.settings \
             -v
 
   # ─────────────────────────────────────────────
