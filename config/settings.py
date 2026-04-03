@@ -3,8 +3,9 @@ config/settings.py
 Paramètres Django — Application Gestion Intégrée Multi-Sites
 """
 
-from pathlib import Path
 from datetime import timedelta
+from pathlib import Path
+
 from decouple import config
 
 # ---------------------------------------------------------------------------
