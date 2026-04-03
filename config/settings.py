@@ -3,8 +3,9 @@ config/settings.py
 Paramètres Django — Application Gestion Intégrée Multi-Sites
 """
 
-from pathlib import Path
 from datetime import timedelta
+from pathlib import Path
+
 from decouple import config
 
 # ---------------------------------------------------------------------------
@@ -186,4 +187,3 @@ SPECTACULAR_SETTINGS = {
     "SERVE_INCLUDE_SCHEMA": False,
     "COMPONENT_SPLIT_REQUEST": True,
 }
-

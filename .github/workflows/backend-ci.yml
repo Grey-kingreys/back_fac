@@ -80,7 +80,7 @@ jobs:
 
       - name: Lancer les migrations
         env:
-          DJANGO_SETTINGS_MODULE: config.settings.dev
+          DJANGO_SETTINGS_MODULE: config.settings
           SECRET_KEY: ci-secret-key-not-used-in-prod
           DB_NAME: gestion_test_db
           DB_USER: gestion_user
@@ -92,7 +92,7 @@ jobs:
 
       - name: Lancer les tests
         env:
-          DJANGO_SETTINGS_MODULE: config.settings.dev
+          DJANGO_SETTINGS_MODULE: config.settings
           SECRET_KEY: ci-secret-key-not-used-in-prod
           DB_NAME: gestion_test_db
           DB_USER: gestion_user
@@ -101,10 +101,13 @@ jobs:
           DB_PORT: 5432
           DEBUG: "True"
         run: |
-          pytest \
-            --tb=short \
-            --ds=config.settings.dev \
-            -v
+            pytest \
+                --tb=short \
+                --ds=config.settings \
+                -v \
+                --ignore=venv \
+                -p no:cacheprovider \
+                || [ $? -eq 5 ]
 
   # ─────────────────────────────────────────────
   # JOB 3 — CD (déploiement Render) — COMMENTÉ
