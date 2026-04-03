@@ -1,0 +1,127 @@
+name: Backend CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  # ─────────────────────────────────────────────
+  # JOB 1 — Lint (flake8 + isort)
+  # ─────────────────────────────────────────────
+  lint:
+    name: Lint (flake8 + isort)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout du code
+        uses: actions/checkout@v4
+
+      - name: Setup Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Installer les dépendances de lint
+        run: |
+          pip install flake8 isort
+
+      - name: Vérifier le style (flake8)
+        run: |
+          flake8 . \
+            --max-line-length=120 \
+            --exclude=.git,__pycache__,migrations,venv,.venv
+
+      - name: Vérifier l'ordre des imports (isort)
+        run: |
+          isort . --check-only --diff \
+            --skip migrations \
+            --skip venv \
+            --skip .venv
+
+  # ─────────────────────────────────────────────
+  # JOB 2 — Tests (pytest + PostgreSQL)
+  # ─────────────────────────────────────────────
+  test:
+    name: Tests (pytest)
+    runs-on: ubuntu-latest
+    needs: lint
+
+    # Service PostgreSQL pour les tests
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_DB: gestion_test_db
+          POSTGRES_USER: gestion_user
+          POSTGRES_PASSWORD: gestion_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout du code
+        uses: actions/checkout@v4
+
+      - name: Setup Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Installer les dépendances
+        run: pip install -r requirements.txt
+
+      - name: Lancer les migrations
+        env:
+          DJANGO_SETTINGS_MODULE: config.settings.dev
+          SECRET_KEY: ci-secret-key-not-used-in-prod
+          DB_NAME: gestion_test_db
+          DB_USER: gestion_user
+          DB_PASSWORD: gestion_password
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DEBUG: "True"
+        run: python manage.py migrate
+
+      - name: Lancer les tests
+        env:
+          DJANGO_SETTINGS_MODULE: config.settings.dev
+          SECRET_KEY: ci-secret-key-not-used-in-prod
+          DB_NAME: gestion_test_db
+          DB_USER: gestion_user
+          DB_PASSWORD: gestion_password
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DEBUG: "True"
+        run: |
+          pytest \
+            --tb=short \
+            --ds=config.settings.dev \
+            -v
+
+  # ─────────────────────────────────────────────
+  # JOB 3 — CD (déploiement Render) — COMMENTÉ
+  # Décommenter quand vous êtes prêts à déployer
+  # ─────────────────────────────────────────────
+  # deploy:
+  #   name: Deploy sur Render
+  #   runs-on: ubuntu-latest
+  #   needs: test
+  #   if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+  #
+  #   steps:
+  #     - name: Trigger Render Deploy Hook
+  #       run: |
+  #         curl -X POST "${{ secrets.RENDER_DEPLOY_HOOK_URL }}"
+  #
+  # Pour activer :
+  # 1. Récupérer le Deploy Hook URL depuis Render (Settings > Deploy Hook)
+  # 2. L'ajouter dans GitHub : Settings > Secrets > RENDER_DEPLOY_HOOK_URL
+  # 3. Décommenter le job ci-dessus
