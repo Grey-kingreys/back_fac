@@ -1,0 +1,19 @@
+[
+    {
+        "model": "companies.company",
+        "pk": 1,
+        "fields": {
+            "name": "Demo Corp",
+            "slug": "demo-corp",
+            "logo": null,
+            "is_active": true,
+            "created_at": "2025-01-01T00:00:00Z",
+            "subscription_plan": "pro",
+            "settings": {
+                "currency": "GNF",
+                "timezone": "Africa/Conakry",
+                "language": "fr"
+            }
+        }
+    }
+]
