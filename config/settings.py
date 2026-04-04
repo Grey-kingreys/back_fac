@@ -43,6 +43,7 @@ THIRD_PARTY_APPS = [
 
 LOCAL_APPS = [
     # Les apps métier seront ajoutées ici au fur et à mesure
+    'apps.companies',
     # "apps.accounts",
     # "apps.entreprises",
     # "apps.zones",

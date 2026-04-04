@@ -1,28 +1,12 @@
-# Core
 Django>=5.1,<6.0
 djangorestframework>=3.15,<4.0
-
-# Base de données
 psycopg2-binary>=2.9
-
-# Authentification JWT
 djangorestframework-simplejwt>=5.3
-
-# CORS
 django-cors-headers>=4.3
-
-# Variables d'environnement
 python-decouple>=3.8
-
-# Documentation API (Swagger)
 drf-spectacular>=0.27
-
-# Utilitaires
-Pillow>=10.0          # gestion des images (fiches produits, documents)
-django-filter>=24.0   # filtrage des querysets dans les vues 
-
-
-# Tests et linting
+Pillow>=10.0
+django-filter>=24.0
 pytest
 pytest-django
 flake8
