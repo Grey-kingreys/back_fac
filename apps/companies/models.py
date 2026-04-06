@@ -107,4 +107,3 @@ class Depot(models.Model):
     def company(self):
         """Raccourci pratique pour accéder à la company via la zone."""
         return self.zone.company
- 

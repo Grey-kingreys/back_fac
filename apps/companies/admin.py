@@ -78,4 +78,5 @@ class DepotAdmin(admin.ModelAdmin):
     @admin.display(description=_("Entreprise"))
     def company_name(self, obj):
         return obj.zone.company.name
+
  
