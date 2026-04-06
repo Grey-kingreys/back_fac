@@ -1,6 +1,7 @@
 from django.contrib import admin
+from django.utils.translation import gettext_lazy as _
 
-from .models import Company
+from .models import Company, Depot, Zone
 
 
 @admin.register(Company)
@@ -26,3 +27,55 @@ class CompanyAdmin(admin.ModelAdmin):
             'fields': ('created_at',),
         }),
     )
+
+
+class DepotInline(admin.TabularInline):
+    """Affiche les dépôts directement dans la fiche d'une Zone."""
+    model = Depot
+    extra = 0
+    fields = ("code", "name", "address", "is_active")
+    show_change_link = True
+ 
+ 
+@admin.register(Zone)
+class ZoneAdmin(admin.ModelAdmin):
+    list_display = ("code", "name", "company", "depot_count", "is_active", "created_at")
+    list_filter = ("company", "is_active")
+    search_fields = ("code", "name", "company__name")
+    readonly_fields = ("created_at", "updated_at")
+    inlines = [DepotInline]
+    fieldsets = (
+        (None, {
+            "fields": ("company", "name", "code", "description", "is_active"),
+        }),
+        (_("Dates"), {
+            "fields": ("created_at", "updated_at"),
+            "classes": ("collapse",),
+        }),
+    )
+ 
+    @admin.display(description=_("Nb dépôts"))
+    def depot_count(self, obj):
+        return obj.depots.count()
+ 
+ 
+@admin.register(Depot)
+class DepotAdmin(admin.ModelAdmin):
+    list_display = ("code", "name", "zone", "company_name", "is_active", "created_at")
+    list_filter = ("zone__company", "zone", "is_active")
+    search_fields = ("code", "name", "zone__name", "zone__company__name")
+    readonly_fields = ("created_at", "updated_at")
+    fieldsets = (
+        (None, {
+            "fields": ("zone", "name", "code", "address", "is_active"),
+        }),
+        (_("Dates"), {
+            "fields": ("created_at", "updated_at"),
+            "classes": ("collapse",),
+        }),
+    )
+ 
+    @admin.display(description=_("Entreprise"))
+    def company_name(self, obj):
+        return obj.zone.company.name
+ 
