@@ -53,7 +53,7 @@ class ZoneAdmin(admin.ModelAdmin):
             "classes": ("collapse",),
         }),
     )
- 
+
     @admin.display(description=_("Nb dépôts"))
     def depot_count(self, obj):
         return obj.depots.count()
@@ -78,5 +78,3 @@ class DepotAdmin(admin.ModelAdmin):
     @admin.display(description=_("Entreprise"))
     def company_name(self, obj):
         return obj.zone.company.name
-
- 

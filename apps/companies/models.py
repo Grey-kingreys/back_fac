@@ -66,10 +66,10 @@ class Zone(models.Model):
                 name="unique_zone_name_per_company",
             )
         ]
- 
+
     def __str__(self):
         return f"{self.code} — {self.name}"
- 
+
 
 class Depot(models.Model):
     """
