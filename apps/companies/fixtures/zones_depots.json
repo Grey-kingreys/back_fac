@@ -1,0 +1,67 @@
+[
+    {
+        "model": "companies.zone",
+        "pk": 1,
+        "fields": {
+            "company": 1,
+            "name": "Zone A",
+            "code": "ZA",
+            "description": "Couvre les entrepôts et points de vente de la zone A.",
+            "is_active": true,
+            "created_at": "2025-01-01T00:00:00Z",
+            "updated_at": "2025-01-01T00:00:00Z"
+        }
+    },
+    {
+        "model": "companies.zone",
+        "pk": 2,
+        "fields": {
+            "company": 1,
+            "name": "Zone B",
+            "code": "ZB",
+            "description": "Couvre les entrepôts et points de vente de la zone B.",
+            "is_active": true,
+            "created_at": "2025-01-01T00:00:00Z",
+            "updated_at": "2025-01-01T00:00:00Z"
+        }
+    },
+    {
+        "model": "companies.depot",
+        "pk": 1,
+        "fields": {
+            "zone": 1,
+            "name": "Dépôt Central A",
+            "code": "DCA",
+            "address": "Avenue de la République, Conakry",
+            "is_active": true,
+            "created_at": "2025-01-01T00:00:00Z",
+            "updated_at": "2025-01-01T00:00:00Z"
+        }
+    },
+    {
+        "model": "companies.depot",
+        "pk": 2,
+        "fields": {
+            "zone": 1,
+            "name": "Dépôt Secondaire A",
+            "code": "DSA",
+            "address": "Rue Industrie, Zone Industrielle Nord, Conakry",
+            "is_active": true,
+            "created_at": "2025-01-01T00:00:00Z",
+            "updated_at": "2025-01-01T00:00:00Z"
+        }
+    },
+    {
+        "model": "companies.depot",
+        "pk": 3,
+        "fields": {
+            "zone": 2,
+            "name": "Dépôt Central B",
+            "code": "DCB",
+            "address": "Boulevard du Commerce, Matoto, Conakry",
+            "is_active": true,
+            "created_at": "2025-01-01T00:00:00Z",
+            "updated_at": "2025-01-01T00:00:00Z"
+        }
+    }
+]

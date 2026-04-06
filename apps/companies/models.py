@@ -1,5 +1,6 @@
 from django.db import models
 from django.utils.text import slugify
+from django.utils.translation import gettext_lazy as _
 
 
 class Company(models.Model):
@@ -35,3 +36,74 @@ class Company(models.Model):
 
     def __str__(self):
         return self.name
+
+
+class Zone(models.Model):
+    """
+    Zone géographique rattachée à une Company.
+    Une Company possède plusieurs Zones.
+    """
+    company = models.ForeignKey(
+        "companies.Company",
+        on_delete=models.CASCADE,
+        related_name="zones",
+        verbose_name=_("Entreprise"),
+    )
+    name = models.CharField(_("Nom"), max_length=150)
+    code = models.CharField(_("Code"), max_length=30, unique=True)
+    description = models.TextField(_("Description"), blank=True)
+    is_active = models.BooleanField(_("Actif"), default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = _("Zone")
+        verbose_name_plural = _("Zones")
+        ordering = ["company", "name"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["company", "name"],
+                name="unique_zone_name_per_company",
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.code} — {self.name}"
+
+
+class Depot(models.Model):
+    """
+    Dépôt physique rattaché à une Zone.
+    Chaque dépôt aura sa propre caisse et ses propres stocks (releases futures).
+    """
+    zone = models.ForeignKey(
+        Zone,
+        on_delete=models.CASCADE,
+        related_name="depots",
+        verbose_name=_("Zone"),
+    )
+    name = models.CharField(_("Nom"), max_length=150)
+    code = models.CharField(_("Code"), max_length=30, unique=True)
+    address = models.TextField(_("Adresse"), blank=True)
+    is_active = models.BooleanField(_("Actif"), default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = _("Dépôt")
+        verbose_name_plural = _("Dépôts")
+        ordering = ["zone", "name"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["zone", "name"],
+                name="unique_depot_name_per_zone",
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.code} — {self.name} ({self.zone.code})"
+
+    @property
+    def company(self):
+        """Raccourci pratique pour accéder à la company via la zone."""
+        return self.zone.company
