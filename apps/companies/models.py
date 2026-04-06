@@ -55,7 +55,7 @@ class Zone(models.Model):
     is_active = models.BooleanField(_("Actif"), default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
- 
+
     class Meta:
         verbose_name = _("Zone")
         verbose_name_plural = _("Zones")
@@ -70,7 +70,7 @@ class Zone(models.Model):
     def __str__(self):
         return f"{self.code} — {self.name}"
  
- 
+
 class Depot(models.Model):
     """
     Dépôt physique rattaché à une Zone.
@@ -88,7 +88,7 @@ class Depot(models.Model):
     is_active = models.BooleanField(_("Actif"), default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
- 
+
     class Meta:
         verbose_name = _("Dépôt")
         verbose_name_plural = _("Dépôts")
@@ -99,10 +99,10 @@ class Depot(models.Model):
                 name="unique_depot_name_per_zone",
             )
         ]
- 
+
     def __str__(self):
         return f"{self.code} — {self.name} ({self.zone.code})"
- 
+
     @property
     def company(self):
         """Raccourci pratique pour accéder à la company via la zone."""

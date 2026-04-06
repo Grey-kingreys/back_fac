@@ -35,8 +35,8 @@ class DepotInline(admin.TabularInline):
     extra = 0
     fields = ("code", "name", "address", "is_active")
     show_change_link = True
- 
- 
+
+
 @admin.register(Zone)
 class ZoneAdmin(admin.ModelAdmin):
     list_display = ("code", "name", "company", "depot_count", "is_active", "created_at")
@@ -57,8 +57,8 @@ class ZoneAdmin(admin.ModelAdmin):
     @admin.display(description=_("Nb dépôts"))
     def depot_count(self, obj):
         return obj.depots.count()
- 
- 
+
+
 @admin.register(Depot)
 class DepotAdmin(admin.ModelAdmin):
     list_display = ("code", "name", "zone", "company_name", "is_active", "created_at")
@@ -74,7 +74,7 @@ class DepotAdmin(admin.ModelAdmin):
             "classes": ("collapse",),
         }),
     )
- 
+
     @admin.display(description=_("Entreprise"))
     def company_name(self, obj):
         return obj.zone.company.name
