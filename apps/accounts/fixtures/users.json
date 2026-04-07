@@ -1,0 +1,170 @@
+[
+  {
+    "model": "accounts.customuser",
+    "pk": 1,
+    "fields": {
+      "email": "superadmin@democorp.com",
+      "first_name": "Super",
+      "last_name": "Admin",
+      "phone": "+224 620 000 001",
+      "company": 1,
+      "depot": null,
+      "role": "superadmin",
+      "avatar": null,
+      "failed_attempts": 0,
+      "is_active": true,
+      "is_staff": true,
+      "is_superuser": true,
+      "password": "pbkdf2_sha256$720000$placeholder$placeholder=",
+      "groups": [],
+      "user_permissions": []
+    }
+  },
+  {
+    "model": "accounts.customuser",
+    "pk": 2,
+    "fields": {
+      "email": "admin@democorp.com",
+      "first_name": "Amadou",
+      "last_name": "Diallo",
+      "phone": "+224 620 000 002",
+      "company": 1,
+      "depot": null,
+      "role": "admin",
+      "avatar": null,
+      "failed_attempts": 0,
+      "is_active": true,
+      "is_staff": true,
+      "is_superuser": false,
+      "password": "pbkdf2_sha256$720000$placeholder$placeholder=",
+      "groups": [],
+      "user_permissions": []
+    }
+  },
+  {
+    "model": "accounts.customuser",
+    "pk": 3,
+    "fields": {
+      "email": "superviseur@democorp.com",
+      "first_name": "Fatoumata",
+      "last_name": "Camara",
+      "phone": "+224 620 000 003",
+      "company": 1,
+      "depot": null,
+      "role": "superviseur",
+      "avatar": null,
+      "failed_attempts": 0,
+      "is_active": true,
+      "is_staff": false,
+      "is_superuser": false,
+      "password": "pbkdf2_sha256$720000$placeholder$placeholder=",
+      "groups": [],
+      "user_permissions": []
+    }
+  },
+  {
+    "model": "accounts.customuser",
+    "pk": 4,
+    "fields": {
+      "email": "stock@democorp.com",
+      "first_name": "Ibrahima",
+      "last_name": "Bah",
+      "phone": "+224 620 000 004",
+      "company": 1,
+      "depot": null,
+      "role": "gestionnaire_stock",
+      "avatar": null,
+      "failed_attempts": 0,
+      "is_active": true,
+      "is_staff": false,
+      "is_superuser": false,
+      "password": "pbkdf2_sha256$720000$placeholder$placeholder=",
+      "groups": [],
+      "user_permissions": []
+    }
+  },
+  {
+    "model": "accounts.customuser",
+    "pk": 5,
+    "fields": {
+      "email": "caissier@democorp.com",
+      "first_name": "Mariama",
+      "last_name": "Sow",
+      "phone": "+224 620 000 005",
+      "company": 1,
+      "depot": null,
+      "role": "caissier",
+      "avatar": null,
+      "failed_attempts": 0,
+      "is_active": true,
+      "is_staff": false,
+      "is_superuser": false,
+      "password": "pbkdf2_sha256$720000$placeholder$placeholder=",
+      "groups": [],
+      "user_permissions": []
+    }
+  },
+  {
+    "model": "accounts.customuser",
+    "pk": 6,
+    "fields": {
+      "email": "chauffeur@democorp.com",
+      "first_name": "Ousmane",
+      "last_name": "Kouyaté",
+      "phone": "+224 620 000 006",
+      "company": 1,
+      "depot": null,
+      "role": "chauffeur",
+      "avatar": null,
+      "failed_attempts": 0,
+      "is_active": true,
+      "is_staff": false,
+      "is_superuser": false,
+      "password": "pbkdf2_sha256$720000$placeholder$placeholder=",
+      "groups": [],
+      "user_permissions": []
+    }
+  },
+  {
+    "model": "accounts.customuser",
+    "pk": 7,
+    "fields": {
+      "email": "maintenance@democorp.com",
+      "first_name": "Mamadou",
+      "last_name": "Traoré",
+      "phone": "+224 620 000 007",
+      "company": 1,
+      "depot": null,
+      "role": "maintenancier",
+      "avatar": null,
+      "failed_attempts": 0,
+      "is_active": true,
+      "is_staff": false,
+      "is_superuser": false,
+      "password": "pbkdf2_sha256$720000$placeholder$placeholder=",
+      "groups": [],
+      "user_permissions": []
+    }
+  },
+  {
+    "model": "accounts.customuser",
+    "pk": 8,
+    "fields": {
+      "email": "commercial@democorp.com",
+      "first_name": "Aissatou",
+      "last_name": "Barry",
+      "phone": "+224 620 000 008",
+      "company": 1,
+      "depot": null,
+      "role": "commercial",
+      "avatar": null,
+      "failed_attempts": 0,
+      "is_active": true,
+      "is_staff": false,
+      "is_superuser": false,
+      "password": "pbkdf2_sha256$720000$placeholder$placeholder=",
+      "groups": [],
+      "user_permissions": []
+    }
+  }
+]
