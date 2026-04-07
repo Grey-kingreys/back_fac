@@ -44,7 +44,7 @@ THIRD_PARTY_APPS = [
 LOCAL_APPS = [
     # Les apps métier seront ajoutées ici au fur et à mesure
     'apps.companies',
-    # "apps.accounts",
+    "apps.accounts",
     # "apps.entreprises",
     # "apps.zones",
     # "apps.produits",
@@ -133,6 +133,7 @@ MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+AUTH_USER_MODEL = "accounts.CustomUser"
 
 # ---------------------------------------------------------------------------
 # Django REST Framework
