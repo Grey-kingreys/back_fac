@@ -19,10 +19,10 @@ class CustomUserAdmin(UserAdmin):
     """
 
     # ── Colonnes dans la liste ─────────────────────────────────────────────
-    list_display  = ('email', 'first_name', 'last_name', 'company', 'role', 'is_active')
-    list_filter   = ('role', 'is_active', 'company')
+    list_display = ('email', 'first_name', 'last_name', 'company', 'role', 'is_active')
+    list_filter = ('role', 'is_active', 'company')
     search_fields = ('email', 'first_name', 'last_name', 'phone')
-    ordering      = ('last_name', 'first_name')
+    ordering = ('last_name', 'first_name')
 
     # ── Formulaire d'édition (détail) ─────────────────────────────────────
     fieldsets = (

@@ -11,14 +11,14 @@ from django.db import models
 # Enum des rôles
 # ---------------------------------------------------------------------------
 class Role(models.TextChoices):
-    SUPERADMIN         = 'superadmin',        'Super Administrateur'
-    ADMIN              = 'admin',             'Administrateur'
-    SUPERVISEUR        = 'superviseur',       'Superviseur'
-    GESTIONNAIRE_STOCK = 'gestionnaire_stock','Gestionnaire de Stock'
-    CAISSIER           = 'caissier',          'Caissier'
-    CHAUFFEUR          = 'chauffeur',         'Chauffeur'
-    MAINTENANCIER      = 'maintenancier',     'Maintenancier'
-    COMMERCIAL         = 'commercial',        'Commercial'
+    SUPERADMIN = 'superadmin', 'Super Administrateur'
+    ADMIN = 'admin', 'Administrateur'
+    SUPERVISEUR = 'superviseur', 'Superviseur'
+    GESTIONNAIRE_STOCK = 'gestionnaire_stock', 'Gestionnaire de Stock'
+    CAISSIER = 'caissier', 'Caissier'
+    CHAUFFEUR = 'chauffeur', 'Chauffeur'
+    MAINTENANCIER = 'maintenancier', 'Maintenancier'
+    COMMERCIAL = 'commercial', 'Commercial'
 
 
 # ---------------------------------------------------------------------------
@@ -75,10 +75,10 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
     """
 
     # ── Identification ──────────────────────────────────────────────────────
-    email      = models.EmailField(unique=True, verbose_name="Email")
+    email = models.EmailField(unique=True, verbose_name="Email")
     first_name = models.CharField(max_length=100, verbose_name="Prénom")
-    last_name  = models.CharField(max_length=100, verbose_name="Nom")
-    phone      = models.CharField(max_length=20, blank=True, verbose_name="Téléphone")
+    last_name = models.CharField(max_length=100, verbose_name="Nom")
+    phone = models.CharField(max_length=20, blank=True, verbose_name="Téléphone")
 
     # ── Rattachement organisationnel ────────────────────────────────────────
     # Import en chaîne de caractères pour éviter les imports circulaires
@@ -122,23 +122,23 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
     )
 
     # ── Flags Django standard ─────────────────────────────────────────────────
-    is_active  = models.BooleanField(default=True,  verbose_name="Actif")
-    is_staff   = models.BooleanField(default=False, verbose_name="Staff admin")
+    is_active = models.BooleanField(default=True, verbose_name="Actif")
+    is_staff = models.BooleanField(default=False, verbose_name="Staff admin")
 
     # ── Métadonnées ────────────────────────────────────────────────────────────
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="Date de création")
-    updated_at = models.DateTimeField(auto_now=True,     verbose_name="Dernière modification")
+    updated_at = models.DateTimeField(auto_now=True, verbose_name="Dernière modification")
 
     # ── Configuration manager + champ de login ─────────────────────────────────
     objects = CustomUserManager()
 
-    USERNAME_FIELD  = 'email'          # login par email
+    USERNAME_FIELD = 'email'          # login par email
     REQUIRED_FIELDS = ['first_name', 'last_name']  # requis pour createsuperuser
 
     class Meta:
-        verbose_name          = "Utilisateur"
-        verbose_name_plural   = "Utilisateurs"
-        ordering              = ['last_name', 'first_name']
+        verbose_name = "Utilisateur"
+        verbose_name_plural = "Utilisateurs"
+        ordering = ['last_name', 'first_name']
 
     # ── Méthodes utilitaires ───────────────────────────────────────────────────
     def get_full_name(self):
