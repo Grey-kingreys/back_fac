@@ -84,7 +84,7 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
     # ── Rattachement organisationnel ────────────────────────────────────────
     # Import en chaîne de caractères pour éviter les imports circulaires
     company = models.ForeignKey(
-    'companies.Company',
+        'companies.Company',
         on_delete=models.PROTECT,
         related_name='users',
         verbose_name="Entreprise",
