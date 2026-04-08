@@ -16,6 +16,8 @@
       "is_staff": true,
       "is_superuser": true,
       "password": "pbkdf2_sha256$720000$placeholder$placeholder=",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
       "groups": [],
       "user_permissions": []
     }
@@ -37,6 +39,8 @@
       "is_staff": true,
       "is_superuser": false,
       "password": "pbkdf2_sha256$720000$placeholder$placeholder=",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
       "groups": [],
       "user_permissions": []
     }
@@ -58,6 +62,8 @@
       "is_staff": false,
       "is_superuser": false,
       "password": "pbkdf2_sha256$720000$placeholder$placeholder=",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
       "groups": [],
       "user_permissions": []
     }
@@ -79,6 +85,8 @@
       "is_staff": false,
       "is_superuser": false,
       "password": "pbkdf2_sha256$720000$placeholder$placeholder=",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
       "groups": [],
       "user_permissions": []
     }
@@ -100,6 +108,8 @@
       "is_staff": false,
       "is_superuser": false,
       "password": "pbkdf2_sha256$720000$placeholder$placeholder=",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
       "groups": [],
       "user_permissions": []
     }
@@ -121,6 +131,8 @@
       "is_staff": false,
       "is_superuser": false,
       "password": "pbkdf2_sha256$720000$placeholder$placeholder=",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
       "groups": [],
       "user_permissions": []
     }
@@ -142,6 +154,8 @@
       "is_staff": false,
       "is_superuser": false,
       "password": "pbkdf2_sha256$720000$placeholder$placeholder=",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
       "groups": [],
       "user_permissions": []
     }
@@ -163,6 +177,8 @@
       "is_staff": false,
       "is_superuser": false,
       "password": "pbkdf2_sha256$720000$placeholder$placeholder=",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
       "groups": [],
       "user_permissions": []
     }

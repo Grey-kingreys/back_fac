@@ -4,6 +4,7 @@ Modèle utilisateur personnalisé avec rôles et multi-entreprises.
 """
 
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
+from django.core.exceptions import ValidationError
 from django.db import models
 
 
@@ -69,7 +70,7 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
     """
     Utilisateur personnalisé.
     - Connexion par email (pas de username)
-    - Appartient obligatoirement à une Company
+    - Appartient obligatoirement à une Company(sauf le super admin)
     - Peut être rattaché à un Dépôt (optionnel)
     - Son rôle détermine ses permissions dans toute l'app
     """
@@ -87,6 +88,8 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
         on_delete=models.PROTECT,
         related_name='users',
         verbose_name="Entreprise",
+        null=True,
+        blank=True,
     )
     depot = models.ForeignKey(
         # Sera activé quand l'app zones sera décommentée
@@ -172,3 +175,12 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
             self.save(update_fields=['failed_attempts', 'is_active'])
         else:
             self.save(update_fields=['failed_attempts'])
+
+
+def clean(self):
+    if self.role == Role.SUPERADMIN:
+        if self.company_id is not None:
+            raise ValidationError("Le Super Administrateur ne doit pas être rattaché à une entreprise.")
+    else:
+        if self.company_id is None:
+            raise ValidationError("Un utilisateur doit appartenir à une entreprise.")
