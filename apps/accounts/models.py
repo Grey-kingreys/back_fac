@@ -85,12 +85,12 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
     # Import en chaîne de caractères pour éviter les imports circulaires
     company = models.ForeignKey(
     'companies.Company',
-    on_delete=models.PROTECT,
-    related_name='users',
-    verbose_name="Entreprise",
-    null=True,
-    blank=True,
-)
+        on_delete=models.PROTECT,
+        related_name='users',
+        verbose_name="Entreprise",
+        null=True,
+        blank=True,
+    )
     depot = models.ForeignKey(
         # Sera activé quand l'app zones sera décommentée
         # 'zones.Depot',
@@ -175,6 +175,7 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
             self.save(update_fields=['failed_attempts', 'is_active'])
         else:
             self.save(update_fields=['failed_attempts'])
+
 
 def clean(self):
     if self.role == Role.SUPERADMIN:
