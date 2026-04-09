@@ -194,6 +194,6 @@ SPECTACULAR_SETTINGS = {
 # ---------------------------------------------------------------------------
 # Resend
 # ---------------------------------------------------------------------------
-RESEND_KEY = config("RESEND_KEY")
+RESEND_KEY = config("RESEND_KEY", default="")
 RESEND_FROM_EMAIL = config("RESEND_FROM_EMAIL", default="onboarding@resend.dev")
 FRONTEND_URL = config("FRONTEND_URL", default="http://localhost:4200")
