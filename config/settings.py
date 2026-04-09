@@ -69,6 +69,7 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    "apps.accounts.middleware.LoginLogMiddleware",
 ]
 
 ROOT_URLCONF = "config.urls"
@@ -189,3 +190,10 @@ SPECTACULAR_SETTINGS = {
     "SERVE_INCLUDE_SCHEMA": False,
     "COMPONENT_SPLIT_REQUEST": True,
 }
+
+# ---------------------------------------------------------------------------
+# Resend
+# ---------------------------------------------------------------------------
+RESEND_KEY = config("RESEND_KEY")
+RESEND_FROM_EMAIL = config("RESEND_FROM_EMAIL", default="onboarding@resend.dev")
+FRONTEND_URL = config("FRONTEND_URL", default="http://localhost:4200")
