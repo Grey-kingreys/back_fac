@@ -13,20 +13,12 @@ from drf_spectacular.views import (
     SpectacularRedocView,
     SpectacularSwaggerView,
 )
-from rest_framework_simplejwt.views import (
-    TokenBlacklistView,
-    TokenObtainPairView,
-    TokenRefreshView,
-)
 
 urlpatterns = [
     # Admin Django
     path("admin/", admin.site.urls),
 
-    # --- Authentification JWT ---
-    path("api/auth/login/", TokenObtainPairView.as_view(), name="token_obtain_pair"),
-    path("api/auth/refresh/", TokenRefreshView.as_view(), name="token_refresh"),
-    path("api/auth/logout/", TokenBlacklistView.as_view(), name="token_blacklist"),
+    path("api/auth/", include("apps.accounts.urls_auth")),
 
     # --- Documentation API ---
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
