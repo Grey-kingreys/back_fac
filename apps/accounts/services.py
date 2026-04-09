@@ -4,8 +4,10 @@ Variable d'environnement requise : RESEND_KEY
 """
 
 import logging
-import requests
+
 from django.conf import settings
+
+import requests
 
 logger = logging.getLogger(__name__)
 
