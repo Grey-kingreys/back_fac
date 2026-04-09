@@ -17,6 +17,7 @@ User = get_user_model()
 # Fixtures
 # ──────────────────────────────────────────────────────────────────────────────
 
+
 @pytest.fixture
 def api_client():
     return APIClient()
