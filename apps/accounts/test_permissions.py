@@ -12,8 +12,8 @@ from rest_framework.views import APIView
 
 from apps.companies.models import Company, Depot, Zone
 
-from .models import Role
-from .permissions import (
+from apps.accounts.models import Role
+from apps.accounts.permissions import (
     CompanyFilterMixin,
     HasRole,
     IsAdminOrSuperAdmin,
