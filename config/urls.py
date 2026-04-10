@@ -8,11 +8,11 @@ from django.conf.urls.static import static
 from django.contrib import admin
 from django.urls import include, path
 
-from drf_spectacular.views import (
-    SpectacularAPIView,
-    SpectacularRedocView,
-    SpectacularSwaggerView,
-)
+# from drf_spectacular.views import (
+#     SpectacularAPIView,
+#     SpectacularRedocView,
+#     SpectacularSwaggerView,
+# )
 
 urlpatterns = [
     # Admin Django
@@ -20,10 +20,10 @@ urlpatterns = [
 
     path("api/auth/", include("apps.accounts.urls_auth")),
 
-    # --- Documentation API ---
-    path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
-    path("api/schema/swagger-ui/", SpectacularSwaggerView.as_view(url_name="schema"), name="swagger-ui"),
-    path("api/schema/redoc/", SpectacularRedocView.as_view(url_name="schema"), name="redoc"),
+    # --- Documentation API (temporairement désactivée) ---
+    # path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
+    # path("api/schema/swagger-ui/", SpectacularSwaggerView.as_view(url_name="schema"), name="swagger-ui"),
+    # path("api/schema/redoc/", SpectacularRedocView.as_view(url_name="schema"), name="redoc"),
 
     # --- Apps métier (à décommenter au fur et à mesure) ---
     # path("api/", include("apps.accounts.urls")),
