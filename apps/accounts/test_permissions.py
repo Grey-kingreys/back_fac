@@ -10,8 +10,6 @@ import pytest
 from rest_framework.request import Request
 from rest_framework.views import APIView
 
-from apps.companies.models import Company, Depot, Zone
-
 from apps.accounts.models import Role
 from apps.accounts.permissions import (
     CompanyFilterMixin,
@@ -22,6 +20,7 @@ from apps.accounts.permissions import (
     IsOwnerOrCompanyAdmin,
     IsSupervisorOrAbove,
 )
+from apps.companies.models import Company, Depot, Zone
 
 User = get_user_model()
 
