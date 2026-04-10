@@ -398,7 +398,6 @@ class IsolationIntegrationTest(TestCase):
             last_name="A",
             password="test123",
             company=self.company_a,
-            depot=self.depot_a,
             role=Role.COMMERCIAL
         )
 
@@ -408,7 +407,6 @@ class IsolationIntegrationTest(TestCase):
             last_name="B",
             password="test123",
             company=self.company_b,
-            depot=self.depot_b,
             role=Role.COMMERCIAL
         )
 
