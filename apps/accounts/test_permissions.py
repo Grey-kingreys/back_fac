@@ -3,22 +3,24 @@ apps/accounts/test_permissions.py
 Tests unitaires pour les permissions et l'isolation multi-companies.
 """
 
-import pytest
-from django.test import TestCase, RequestFactory
 from django.contrib.auth import get_user_model
-from rest_framework.views import APIView
-from rest_framework.request import Request
+from django.test import RequestFactory, TestCase
 
-from apps.companies.models import Company, Zone, Depot
+import pytest
+from rest_framework.request import Request
+from rest_framework.views import APIView
+
+from apps.companies.models import Company, Depot, Zone
+
 from .models import Role
 from .permissions import (
-    IsCompanyMember,
-    HasRole,
-    IsOwnerOrCompanyAdmin,
     CompanyFilterMixin,
+    HasRole,
     IsAdminOrSuperAdmin,
-    IsSupervisorOrAbove,
+    IsCompanyMember,
     IsCompanyMemberOrReadOnly,
+    IsOwnerOrCompanyAdmin,
+    IsSupervisorOrAbove,
 )
 
 User = get_user_model()
