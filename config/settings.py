@@ -37,7 +37,7 @@ THIRD_PARTY_APPS = [
     "rest_framework_simplejwt",
     "rest_framework_simplejwt.token_blacklist",
     "corsheaders",
-    # "drf_spectacular",  # Temporairement désactivé (problème Python 3.12)
+    "drf_spectacular",
     "django_filters",
 ]
 
@@ -93,26 +93,18 @@ TEMPLATES = [
 WSGI_APPLICATION = "config.wsgi.application"
 
 # ---------------------------------------------------------------------------
-# Base de données - SQLite pour test (à remplacer par PostgreSQL plus tard)
+# Base de données - PostgreSQL
 # ---------------------------------------------------------------------------
 DATABASES = {
     "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "db.sqlite3",
+        "ENGINE": "django.db.backends.postgresql",
+        "NAME": config("DB_NAME"),
+        "USER": config("DB_USER"),
+        "PASSWORD": config("DB_PASSWORD"),
+        "HOST": config("DB_HOST", default="localhost"),
+        "PORT": config("DB_PORT", default="5432"),
     }
 }
-
-# Configuration PostgreSQL (commentée pour test)
-# DATABASES = {
-#     "default": {
-#         "ENGINE": "django.db.backends.postgresql",
-#         "NAME": config("DB_NAME"),
-#         "USER": config("DB_USER"),
-#         "PASSWORD": config("DB_PASSWORD"),
-#         "HOST": config("DB_HOST", default="localhost"),
-#         "PORT": config("DB_PORT", default="5432"),
-#     }
-# }
 
 # ---------------------------------------------------------------------------
 # Validation des mots de passe
@@ -161,7 +153,7 @@ REST_FRAMEWORK = {
     ),
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
     "PAGE_SIZE": 25,
-    # "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",  # Temporairement désactivé
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
 }
 
 # ---------------------------------------------------------------------------
@@ -186,18 +178,18 @@ CORS_ALLOWED_ORIGINS = config(
 CORS_ALLOW_CREDENTIALS = True
 
 # ---------------------------------------------------------------------------
-# drf-spectacular — Swagger / OpenAPI (temporairement désactivé)
+# drf-spectacular — Swagger / OpenAPI
 # ---------------------------------------------------------------------------
-# SPECTACULAR_SETTINGS = {
-#     "TITLE": "API Gestion Intégrée Multi-Sites",
-#     "DESCRIPTION": (
-#         "API RESTful pour la gestion commerciale, financière, logistique "
-#         "et des ressources humaines d'une entreprise multi-sites."
-#     ),
-#     "VERSION": "1.0.0",
-#     "SERVE_INCLUDE_SCHEMA": False,
-#     "COMPONENT_SPLIT_REQUEST": True,
-# }
+SPECTACULAR_SETTINGS = {
+    "TITLE": "API Gestion Intégrée Multi-Sites",
+    "DESCRIPTION": (
+        "API RESTful pour la gestion commerciale, financière, logistique "
+        "et des ressources humaines d'une entreprise multi-sites."
+    ),
+    "VERSION": "1.0.0",
+    "SERVE_INCLUDE_SCHEMA": False,
+    "COMPONENT_SPLIT_REQUEST": True,
+}
 
 # ---------------------------------------------------------------------------
 # Resend
