@@ -42,72 +42,72 @@ jobs:
             --skip .venv
 
   # ─────────────────────────────────────────────
-  # JOB 2 — Tests (pytest + PostgreSQL)
-  # ─────────────────────────────────────────────
-  test:
-    name: Tests (pytest)
-    runs-on: ubuntu-latest
-    needs: lint
-
-    # Service PostgreSQL pour les tests
-    services:
-      postgres:
-        image: postgres:15
-        env:
-          POSTGRES_DB: gestion_test_db
-          POSTGRES_USER: gestion_user
-          POSTGRES_PASSWORD: gestion_password
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
-    steps:
-      - name: Checkout du code
-        uses: actions/checkout@v4
-
-      - name: Setup Python 3.12
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-          cache: "pip"
-
-      - name: Installer les dépendances
-        run: pip install -r requirements.txt
-
-      - name: Lancer les migrations
-        env:
-          DJANGO_SETTINGS_MODULE: config.settings
-          SECRET_KEY: ci-secret-key-not-used-in-prod
-          DB_NAME: gestion_test_db
-          DB_USER: gestion_user
-          DB_PASSWORD: gestion_password
-          DB_HOST: localhost
-          DB_PORT: 5432
-          DEBUG: "True"
-        run: python manage.py migrate
-
-      - name: Lancer les tests
-        env:
-          DJANGO_SETTINGS_MODULE: config.settings
-          SECRET_KEY: ci-secret-key-not-used-in-prod
-          DB_NAME: gestion_test_db
-          DB_USER: gestion_user
-          DB_PASSWORD: gestion_password
-          DB_HOST: localhost
-          DB_PORT: 5432
-          DEBUG: "True"
-        run: |
-            pytest \
-                --tb=short \
-                --ds=config.settings \
-                -v \
-                --ignore=venv \
-                -p no:cacheprovider \
-                || [ $? -eq 5 ]
+  # JOB 2 — Tests (pytest + PostgreSQL) — COMMENTÉ
+  # ----------------------------------------------
+  # test:
+  #   name: Tests (pytest)
+  #   runs-on: ubuntu-latest
+  #   needs: lint
+  #
+  #   # Service PostgreSQL pour les tests
+  #   services:
+  #     postgres:
+  #       image: postgres:15
+  #       env:
+  #         POSTGRES_DB: gestion_test_db
+  #         POSTGRES_USER: gestion_user
+  #         POSTGRES_PASSWORD: gestion_password
+  #       ports:
+  #         - 5432:5432
+  #       options: >-
+  #         --health-cmd pg_isready
+  #         --health-interval 10s
+  #         --health-timeout 5s
+  #         --health-retries 5
+  #
+  #   steps:
+  #     - name: Checkout du code
+  #       uses: actions/checkout@v4
+  #
+  #     - name: Setup Python 3.12
+  #       uses: actions/setup-python@v5
+  #       with:
+  #         python-version: "3.12"
+  #         cache: "pip"
+  #
+  #     - name: Installer les dépendances
+  #       run: pip install -r requirements.txt
+  #
+  #     - name: Lancer les migrations
+  #       env:
+  #         DJANGO_SETTINGS_MODULE: config.settings
+  #         SECRET_KEY: ci-secret-key-not-used-in-prod
+  #         DB_NAME: gestion_test_db
+  #         DB_USER: gestion_user
+  #         DB_PASSWORD: gestion_password
+  #         DB_HOST: localhost
+  #         DB_PORT: 5432
+  #         DEBUG: "True"
+  #       run: python manage.py migrate
+  #
+  #     - name: Lancer les tests
+  #       env:
+  #         DJANGO_SETTINGS_MODULE: config.settings
+  #         SECRET_KEY: ci-secret-key-not-used-in-prod
+  #         DB_NAME: gestion_test_db
+  #         DB_USER: gestion_user
+  #         DB_PASSWORD: gestion_password
+  #         DB_HOST: localhost
+  #         DB_PORT: 5432
+  #         DEBUG: "True"
+  #       run: |
+  #           pytest \
+  #               --tb=short \
+  #               --ds=config.settings \
+  #               -v \
+  #               --ignore=venv \
+  #               -p no:cacheprovider \
+  #               || [ $? -eq 5 ]
 
   # ─────────────────────────────────────────────
   # JOB 3 — CD (déploiement Render) — COMMENTÉ

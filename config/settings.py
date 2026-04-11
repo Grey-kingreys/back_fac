@@ -93,7 +93,7 @@ TEMPLATES = [
 WSGI_APPLICATION = "config.wsgi.application"
 
 # ---------------------------------------------------------------------------
-# Base de données PostgreSQL
+# Base de données - PostgreSQL
 # ---------------------------------------------------------------------------
 DATABASES = {
     "default": {

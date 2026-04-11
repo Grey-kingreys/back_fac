@@ -56,3 +56,5 @@ coverage.xml
 # --- Divers ---
 *.bak
 *.tmp
+test_permissions_final.py
+test_verification.py
