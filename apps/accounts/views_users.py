@@ -16,10 +16,10 @@ from django.contrib.auth import get_user_model
 from drf_spectacular.utils import OpenApiParameter, OpenApiResponse, extend_schema
 from rest_framework import status
 from rest_framework.decorators import action
+from rest_framework.mixins import ListModelMixin, RetrieveModelMixin
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.viewsets import GenericViewSet
-from rest_framework.mixins import ListModelMixin, RetrieveModelMixin
 
 from apps.accounts.models import Role
 from apps.accounts.permissions import CompanyFilterMixin, HasRole, IsCompanyMember
