@@ -18,17 +18,19 @@ urlpatterns = [
     # Admin Django
     path("admin/", admin.site.urls),
 
+    # --- Auth ---
     path("api/auth/", include("apps.accounts.urls_auth")),
+
+    # --- CRUD Utilisateurs (R1-B07) ---
+    path("api/", include("apps.accounts.urls")),
 
     # --- Documentation API ---
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
-    path("api/schema/swagger-ui/", SpectacularSwaggerView.as_view(url_name="schema"), name="swagger-ui"),
+    path("api/schema/docs/", SpectacularSwaggerView.as_view(url_name="schema"), name="swagger-ui"),
     path("api/schema/redoc/", SpectacularRedocView.as_view(url_name="schema"), name="redoc"),
 
     # --- Apps métier (à décommenter au fur et à mesure) ---
-    # path("api/", include("apps.accounts.urls")),
-    # path("api/", include("apps.entreprises.urls")),
-    # path("api/", include("apps.zones.urls")),
+    # path("api/", include("apps.companies.urls")),   # R1-B08
     # path("api/", include("apps.produits.urls")),
     # path("api/", include("apps.stocks.urls")),
     # path("api/", include("apps.ventes.urls")),
