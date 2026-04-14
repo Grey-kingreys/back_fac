@@ -30,7 +30,7 @@ urlpatterns = [
     path("api/schema/redoc/", SpectacularRedocView.as_view(url_name="schema"), name="redoc"),
 
     # --- Apps métier (à décommenter au fur et à mesure) ---
-    # path("api/", include("apps.companies.urls")),   # R1-B08
+    path("api/", include("apps.companies.urls")),
     # path("api/", include("apps.produits.urls")),
     # path("api/", include("apps.stocks.urls")),
     # path("api/", include("apps.ventes.urls")),
