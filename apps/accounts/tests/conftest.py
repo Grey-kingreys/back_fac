@@ -13,6 +13,7 @@ from apps.companies.models import Company, Depot, Zone
 # Helpers
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 def make_user(email, role, company=None, depot=None, is_active=True, password="Pass1234!"):
     return CustomUser.objects.create_user(
         email=email,
@@ -37,6 +38,7 @@ def auth_client(user, password="Pass1234!"):
 # ─────────────────────────────────────────────────────────────────────────────
 # Companies
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 @pytest.fixture
 def company_a(db):
@@ -72,6 +74,7 @@ def zone_a2(db, company_a):
 # Dépôts
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 @pytest.fixture
 def depot_a(db, zone_a):
     return Depot.objects.create(zone=zone_a, name="Dépôt Central A", code="DCA")
@@ -91,6 +94,7 @@ def depot_a2(db, zone_a):
 # ─────────────────────────────────────────────────────────────────────────────
 # Utilisateurs
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 @pytest.fixture
 def superadmin(db):
@@ -125,6 +129,7 @@ def commercial_b(db, company_b):
 # ─────────────────────────────────────────────────────────────────────────────
 # Clients API authentifiés
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 @pytest.fixture
 def client_superadmin(superadmin):

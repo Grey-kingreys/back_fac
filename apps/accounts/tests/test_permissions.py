@@ -22,6 +22,7 @@ from apps.companies.models import Company, Depot, Zone
 # Helpers locaux
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 class FakeViewSet:
     """Simule un ViewSet pour les mixins qui ont besoin de self.request."""
     def __init__(self, queryset, request):
@@ -121,7 +122,7 @@ class TestCompanyFilterMixin:
 
     def test_user_voit_seulement_sa_company(self, admin_a, zone_a, zone_b):
         req = make_request(admin_a)
-        view = FakeViewSet(Zone.objects.all(), req)
+        # view = FakeViewSet(Zone.objects.all(), req)
         mixin = CompanyFilterMixin()
         mixin.request = req
         mixin.queryset = Zone.objects.all()
