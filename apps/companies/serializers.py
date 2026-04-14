@@ -11,6 +11,7 @@ from .models import Depot, Zone
 # ZONE
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 class ZoneListSerializer(serializers.ModelSerializer):
     """
     Serializer léger pour la liste des zones.
