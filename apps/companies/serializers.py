@@ -7,13 +7,16 @@ from rest_framework import serializers
 
 from .models import Depot, Zone
 
+
 # ─────────────────────────────────────────────────────────────────────────────
 # ZONE
 # ─────────────────────────────────────────────────────────────────────────────
 
-
 class ZoneListSerializer(serializers.ModelSerializer):
-    """Serializer léger pour la liste des zones."""
+    """
+    Serializer léger pour la liste des zones.
+    Inclut le nombre de dépôts et les coordonnées GPS.
+    """
     depot_count = serializers.SerializerMethodField()
 
     class Meta:
@@ -24,6 +27,8 @@ class ZoneListSerializer(serializers.ModelSerializer):
             'code',
             'description',
             'is_active',
+            'latitude',
+            'longitude',
             'depot_count',
             'created_at',
         ]
@@ -34,7 +39,10 @@ class ZoneListSerializer(serializers.ModelSerializer):
 
 
 class ZoneDetailSerializer(serializers.ModelSerializer):
-    """Serializer complet avec la liste des dépôts imbriqués."""
+    """
+    Serializer complet avec la liste des dépôts imbriqués et les coordonnées GPS.
+    Utilisé pour GET /api/zones/{id}/ et les réponses de création/modification.
+    """
     depots = serializers.SerializerMethodField()
     depot_count = serializers.SerializerMethodField()
 
@@ -46,6 +54,8 @@ class ZoneDetailSerializer(serializers.ModelSerializer):
             'code',
             'description',
             'is_active',
+            'latitude',
+            'longitude',
             'depot_count',
             'depots',
             'created_at',
@@ -57,12 +67,15 @@ class ZoneDetailSerializer(serializers.ModelSerializer):
         return obj.depots.count()
 
     def get_depots(self, obj):
-        # Retourne les dépôts imbriqués (léger, sans récursion)
         return DepotListSerializer(obj.depots.all(), many=True).data
 
 
 class ZoneCreateUpdateSerializer(serializers.ModelSerializer):
-    """Serializer de création et modification d'une zone."""
+    """
+    Serializer de création et modification d'une zone.
+    Les coordonnées GPS sont optionnelles — elles peuvent être définies
+    plus tard via un clic sur la carte OpenStreetMap (frontend).
+    """
 
     class Meta:
         model = Zone
@@ -71,25 +84,44 @@ class ZoneCreateUpdateSerializer(serializers.ModelSerializer):
             'code',
             'description',
             'is_active',
+            'latitude',
+            'longitude',
         ]
 
     def validate_code(self, value):
-        """Code unique globalement (contrainte DB), on donne un message clair."""
+        """Code unique globalement (insensible à la casse). Stocké en majuscules."""
         qs = Zone.objects.filter(code__iexact=value)
-        # En modification, exclure l'instance courante
         if self.instance:
             qs = qs.exclude(pk=self.instance.pk)
         if qs.exists():
-            raise serializers.ValidationError("Ce code est déjà utilisé par une autre zone.")
+            raise serializers.ValidationError(
+                "Ce code est déjà utilisé par une autre zone."
+            )
         return value.upper()
+
+    def validate_latitude(self, value):
+        """Latitude doit être entre -90 et 90."""
+        if value is not None and not (-90 <= value <= 90):
+            raise serializers.ValidationError(
+                "La latitude doit être comprise entre -90 et 90."
+            )
+        return value
+
+    def validate_longitude(self, value):
+        """Longitude doit être entre -180 et 180."""
+        if value is not None and not (-180 <= value <= 180):
+            raise serializers.ValidationError(
+                "La longitude doit être comprise entre -180 et 180."
+            )
+        return value
 
     def validate(self, attrs):
         """Nom unique par company."""
         request = self.context.get('request')
         company = request.user.company if request else None
 
-        if company:
-            qs = Zone.objects.filter(company=company, name__iexact=attrs.get('name', ''))
+        if company and 'name' in attrs:
+            qs = Zone.objects.filter(company=company, name__iexact=attrs['name'])
             if self.instance:
                 qs = qs.exclude(pk=self.instance.pk)
             if qs.exists():
@@ -110,7 +142,10 @@ class ZoneCreateUpdateSerializer(serializers.ModelSerializer):
 # ─────────────────────────────────────────────────────────────────────────────
 
 class DepotListSerializer(serializers.ModelSerializer):
-    """Serializer léger pour la liste des dépôts."""
+    """
+    Serializer léger pour la liste des dépôts.
+    Utilisé aussi pour les dépôts imbriqués dans ZoneDetailSerializer.
+    """
     zone_name = serializers.CharField(source='zone.name', read_only=True)
     zone_code = serializers.CharField(source='zone.code', read_only=True)
 
@@ -131,9 +166,19 @@ class DepotListSerializer(serializers.ModelSerializer):
 
 
 class DepotDetailSerializer(serializers.ModelSerializer):
-    """Serializer complet d'un dépôt."""
+    """
+    Serializer complet d'un dépôt.
+    Inclut les coordonnées GPS de la zone parente — utile pour
+    le frontend qui doit positionner le marqueur sur la carte.
+    """
     zone_name = serializers.CharField(source='zone.name', read_only=True)
     zone_code = serializers.CharField(source='zone.code', read_only=True)
+    zone_latitude = serializers.DecimalField(
+        source='zone.latitude', max_digits=9, decimal_places=6, read_only=True
+    )
+    zone_longitude = serializers.DecimalField(
+        source='zone.longitude', max_digits=9, decimal_places=6, read_only=True
+    )
 
     class Meta:
         model = Depot
@@ -146,6 +191,8 @@ class DepotDetailSerializer(serializers.ModelSerializer):
             'zone_id',
             'zone_name',
             'zone_code',
+            'zone_latitude',
+            'zone_longitude',
             'created_at',
             'updated_at',
         ]
@@ -153,7 +200,10 @@ class DepotDetailSerializer(serializers.ModelSerializer):
 
 
 class DepotCreateUpdateSerializer(serializers.ModelSerializer):
-    """Serializer de création et modification d'un dépôt."""
+    """
+    Serializer de création et modification d'un dépôt.
+    La zone doit appartenir à la même company que l'utilisateur connecté.
+    """
     zone_id = serializers.PrimaryKeyRelatedField(
         queryset=Zone.objects.filter(is_active=True),
         source='zone',
@@ -180,7 +230,7 @@ class DepotCreateUpdateSerializer(serializers.ModelSerializer):
         return zone
 
     def validate_code(self, value):
-        """Code unique globalement."""
+        """Code unique globalement (insensible à la casse). Stocké en majuscules."""
         qs = Depot.objects.filter(code__iexact=value)
         if self.instance:
             qs = qs.exclude(pk=self.instance.pk)
