@@ -44,6 +44,7 @@ from .serializers import (
 # Mixin commun : permissions + vérification company
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 class CompanyObjectMixin:
     """
     Mixin partagé par ZoneViewSet et DepotViewSet.
