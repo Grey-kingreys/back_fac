@@ -32,7 +32,6 @@ class CustomUserManager(BaseUserManager):
     """
 
     def _create_user(self, email, password, **extra_fields):
-        """Méthode interne partagée par create_user et create_superuser."""
         if not email:
             raise ValueError("L'adresse email est obligatoire.")
         email = self.normalize_email(email)
@@ -42,14 +41,12 @@ class CustomUserManager(BaseUserManager):
         return user
 
     def create_user(self, email, password=None, **extra_fields):
-        """Crée un utilisateur standard (non superuser)."""
         extra_fields.setdefault('is_staff', False)
         extra_fields.setdefault('is_superuser', False)
         extra_fields.setdefault('is_active', True)
         return self._create_user(email, password, **extra_fields)
 
     def create_superuser(self, email, password=None, **extra_fields):
-        """Crée un super-utilisateur avec tous les droits."""
         extra_fields.setdefault('is_staff', True)
         extra_fields.setdefault('is_superuser', True)
         extra_fields.setdefault('is_active', True)
@@ -70,7 +67,7 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
     """
     Utilisateur personnalisé.
     - Connexion par email (pas de username)
-    - Appartient obligatoirement à une Company(sauf le super admin)
+    - Appartient obligatoirement à une Company (sauf le superadmin)
     - Peut être rattaché à un Dépôt (optionnel)
     - Son rôle détermine ses permissions dans toute l'app
     """
@@ -82,7 +79,6 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
     phone = models.CharField(max_length=20, blank=True, verbose_name="Téléphone")
 
     # ── Rattachement organisationnel ────────────────────────────────────────
-    # Import en chaîne de caractères pour éviter les imports circulaires
     company = models.ForeignKey(
         'companies.Company',
         on_delete=models.PROTECT,
@@ -91,14 +87,14 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
         null=True,
         blank=True,
     )
+
+    # ── CORRIGÉ R1-B08 : depot pointe maintenant sur companies.Depot ────────
     depot = models.ForeignKey(
-        # Sera activé quand l'app zones sera décommentée
-        # 'zones.Depot',
-        'companies.Company',        # placeholder temporaire — à remplacer par zones.Depot
+        'companies.Depot',
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        related_name='depot_users',
+        related_name='users',
         verbose_name="Dépôt",
     )
 
@@ -135,8 +131,8 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
     # ── Configuration manager + champ de login ─────────────────────────────────
     objects = CustomUserManager()
 
-    USERNAME_FIELD = 'email'          # login par email
-    REQUIRED_FIELDS = ['first_name', 'last_name']  # requis pour createsuperuser
+    USERNAME_FIELD = 'email'
+    REQUIRED_FIELDS = ['first_name', 'last_name']
 
     class Meta:
         verbose_name = "Utilisateur"
@@ -162,13 +158,11 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
         return self.role in (Role.SUPERADMIN, Role.ADMIN)
 
     def reset_failed_attempts(self):
-        """Remet le compteur d'échecs à zéro après un login réussi."""
         if self.failed_attempts > 0:
             self.failed_attempts = 0
             self.save(update_fields=['failed_attempts'])
 
     def increment_failed_attempts(self):
-        """Incrémente le compteur et désactive le compte après 5 échecs."""
         self.failed_attempts += 1
         if self.failed_attempts >= 5:
             self.is_active = False
@@ -176,11 +170,17 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
         else:
             self.save(update_fields=['failed_attempts'])
 
+    def clean(self):
+        if self.role == Role.SUPERADMIN:
+            if self.company_id is not None:
+                raise ValidationError("Le Super Administrateur ne doit pas être rattaché à une entreprise.")
+        else:
+            if self.company_id is None:
+                raise ValidationError("Un utilisateur doit appartenir à une entreprise.")
 
-def clean(self):
-    if self.role == Role.SUPERADMIN:
-        if self.company_id is not None:
-            raise ValidationError("Le Super Administrateur ne doit pas être rattaché à une entreprise.")
-    else:
-        if self.company_id is None:
-            raise ValidationError("Un utilisateur doit appartenir à une entreprise.")
+        # Le dépôt doit appartenir à la même company que l'utilisateur
+        if self.depot_id and self.company_id:
+            if self.depot.zone.company_id != self.company_id:
+                raise ValidationError(
+                    "Le dépôt doit appartenir à la même entreprise que l'utilisateur."
+                )

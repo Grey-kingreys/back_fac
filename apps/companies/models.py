@@ -53,6 +53,25 @@ class Zone(models.Model):
     code = models.CharField(_("Code"), max_length=30, unique=True)
     description = models.TextField(_("Description"), blank=True)
     is_active = models.BooleanField(_("Actif"), default=True)
+
+    # ── Coordonnées GPS du point central de la zone ──────────────────────────
+    latitude = models.DecimalField(
+        _("Latitude"),
+        max_digits=9,
+        decimal_places=6,
+        null=True,
+        blank=True,
+        help_text="Latitude du point central de la zone (ex: 9.537500)",
+    )
+    longitude = models.DecimalField(
+        _("Longitude"),
+        max_digits=9,
+        decimal_places=6,
+        null=True,
+        blank=True,
+        help_text="Longitude du point central de la zone (ex: -13.677300)",
+    )
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

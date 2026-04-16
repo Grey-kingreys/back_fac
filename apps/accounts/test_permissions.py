@@ -25,7 +25,7 @@ from apps.companies.models import Company, Depot, Zone
 User = get_user_model()
 
 
-class TestCompanyModel:
+class CompanyModelStub:
     """Modèle de test pour simuler des objets avec company."""
 
     def __init__(self, company):
@@ -33,7 +33,7 @@ class TestCompanyModel:
         self.id = 1
 
 
-class TestUserModel:
+class UserModelStub:
     """Modèle de test pour simuler des objets avec user."""
 
     def __init__(self, user):
@@ -41,8 +41,17 @@ class TestUserModel:
         self.id = user.id
 
 
-class TestCompanyFilterViewSet(CompanyFilterMixin, APIView):
+class CompanyFilterViewSet(CompanyFilterMixin, APIView):
     """ViewSet de test pour le mixin CompanyFilterMixin."""
+
+    def __init__(self, queryset):
+        self.queryset = queryset
+        super().__init__()
+
+
+class DepotFilterViewSetStub(CompanyFilterMixin, APIView):
+    """ViewSet de test pour Depot — company accessible via zone."""
+    company_lookup_field = 'zone__company'
 
     def __init__(self, queryset):
         self.queryset = queryset
@@ -89,8 +98,8 @@ class IsCompanyMemberTest(TestCase):
         )
 
         # Objets de test
-        self.obj_company_a = TestCompanyModel(self.company_a)
-        self.obj_company_b = TestCompanyModel(self.company_b)
+        self.obj_company_a = CompanyModelStub(self.company_a)
+        self.obj_company_b = CompanyModelStub(self.company_b)
 
     def test_user_can_access_own_company_object(self):
         """Un utilisateur peut accéder aux objets de sa company."""
@@ -271,7 +280,7 @@ class CompanyFilterMixinTest(TestCase):
         request = self.factory.get('/')
         request.user = self.user_a
 
-        view = TestCompanyFilterViewSet(Zone.objects.all())
+        view = CompanyFilterViewSet(Zone.objects.all())
         view.request = request
 
         queryset = view.get_queryset()
@@ -283,7 +292,7 @@ class CompanyFilterMixinTest(TestCase):
         request = self.factory.get('/')
         request.user = self.superadmin
 
-        view = TestCompanyFilterViewSet(Zone.objects.all())
+        view = CompanyFilterViewSet(Zone.objects.all())
         view.request = request
 
         queryset = view.get_queryset()
@@ -302,7 +311,7 @@ class CompanyFilterMixinTest(TestCase):
         request = self.factory.get('/')
         request.user = user_no_company
 
-        view = TestCompanyFilterViewSet(Zone.objects.all())
+        view = CompanyFilterViewSet(Zone.objects.all())
         view.request = request
 
         queryset = view.get_queryset()
@@ -343,7 +352,7 @@ class IsOwnerOrCompanyAdminTest(TestCase):
         )
 
         # Objets de test
-        self.user_obj = TestUserModel(self.user)
+        self.user_obj = UserModelStub(self.user)
         self.user_obj.company = self.company
 
     def test_user_can_access_own_object(self):
@@ -425,11 +434,11 @@ class IsolationIntegrationTest(TestCase):
         request_a = self.factory.get('/')
         request_a.user = self.user_a
 
-        view_zones_a = TestCompanyFilterViewSet(Zone.objects.all())
+        view_zones_a = CompanyFilterViewSet(Zone.objects.all())
         view_zones_a.request = request_a
         zones_a = view_zones_a.get_queryset()
 
-        view_depots_a = TestCompanyFilterViewSet(Depot.objects.all())
+        view_depots_a = DepotFilterViewSetStub(Depot.objects.all())
         view_depots_a.request = request_a
         depots_a = view_depots_a.get_queryset()
 
@@ -442,11 +451,11 @@ class IsolationIntegrationTest(TestCase):
         request_b = self.factory.get('/')
         request_b.user = self.user_b
 
-        view_zones_b = TestCompanyFilterViewSet(Zone.objects.all())
+        view_zones_b = CompanyFilterViewSet(Zone.objects.all())
         view_zones_b.request = request_b
         zones_b = view_zones_b.get_queryset()
 
-        view_depots_b = TestCompanyFilterViewSet(Depot.objects.all())
+        view_depots_b = DepotFilterViewSetStub(Depot.objects.all())
         view_depots_b.request = request_b
         depots_b = view_depots_b.get_queryset()
 
@@ -459,11 +468,11 @@ class IsolationIntegrationTest(TestCase):
         request_admin_a = self.factory.get('/')
         request_admin_a.user = self.admin_a
 
-        view_zones_admin_a = TestCompanyFilterViewSet(Zone.objects.all())
+        view_zones_admin_a = CompanyFilterViewSet(Zone.objects.all())
         view_zones_admin_a.request = request_admin_a
         zones_admin_a = view_zones_admin_a.get_queryset()
 
-        view_depots_admin_a = TestCompanyFilterViewSet(Depot.objects.all())
+        view_depots_admin_a = DepotFilterViewSetStub(Depot.objects.all())
         view_depots_admin_a.request = request_admin_a
         depots_admin_a = view_depots_admin_a.get_queryset()
 
