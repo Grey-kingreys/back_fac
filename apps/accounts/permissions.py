@@ -104,20 +104,13 @@ class IsOwnerOrCompanyAdmin(permissions.BasePermission):
 
 class CompanyFilterMixin:
     """
-    Mixin pour filtrer automatiquement les QuerySets par company de l'utilisateur connecté.
-
-    Utilisation :
-    class MyViewSet(CompanyFilterMixin, viewsets.ModelViewSet):
-        queryset = MyModel.objects.all()
-        ...
+    Mixin pour filtrer automatiquement les QuerySets par company.
+    Surcharger `company_lookup_field` si la company est accessible via une relation
+    (ex: 'zone__company' pour Depot).
     """
+    company_lookup_field = 'company'  # ← nouveau
 
     def get_queryset(self):
-        """
-        Filtre le queryset par company de l'utilisateur.
-        Le superadmin voit toutes les données.
-        """
-        # Utiliser le queryset défini dans la vue ou get_queryset de la classe parente
         if hasattr(self, 'queryset'):
             queryset = self.queryset
         elif hasattr(super(), 'get_queryset'):
@@ -127,25 +120,15 @@ class CompanyFilterMixin:
 
         user = self.request.user
 
-        # Le superadmin voit tout
         if user.is_superadmin:
             return queryset
 
-        # Les autres utilisateurs voient seulement leur company
         user_company = user.company
         if not user_company:
             return queryset.none()
 
-        # Filtrer par company si le modèle a ce champ
-        if hasattr(queryset.model, 'company'):
-            return queryset.filter(company=user_company)
-
-        # Filtrer par user si le modèle est lié à un utilisateur
-        if hasattr(queryset.model, 'user'):
-            return queryset.filter(user__company=user_company)
-
-        # Si le modèle n'a ni company ni user, retourner tout (attention !)
-        return queryset
+        # Utilise le lookup field (supporte 'company' et 'zone__company', etc.)
+        return queryset.filter(**{self.company_lookup_field: user_company})
 
 
 class DepotFilterMixin:

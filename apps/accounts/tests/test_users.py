@@ -91,7 +91,7 @@ class TestUserDetail:
 
     def test_admin_refuse_user_autre_company(self, client_admin_a, commercial_b):
         res = client_admin_a.get(detail_url(commercial_b.id))
-        assert res.status_code == status.HTTP_403_FORBIDDEN
+        assert res.status_code == status.HTTP_404_NOT_FOUND
 
     def test_superviseur_voit_user_sa_company(self, client_superviseur_a, commercial_a):
         res = client_superviseur_a.get(detail_url(commercial_a.id))
@@ -194,7 +194,7 @@ class TestUserUpdate:
 
     def test_admin_refuse_user_autre_company(self, client_admin_a, commercial_b):
         res = client_admin_a.patch(detail_url(commercial_b.id), {"first_name": "Hack"})
-        assert res.status_code == status.HTTP_403_FORBIDDEN
+        assert res.status_code == status.HTTP_404_NOT_FOUND
 
     def test_superviseur_refuse_modification(self, client_superviseur_a, commercial_a):
         res = client_superviseur_a.patch(detail_url(commercial_a.id), {"first_name": "Hack"})
@@ -237,7 +237,7 @@ class TestUserDestroy:
 
     def test_admin_refuse_autre_company(self, client_admin_a, commercial_b):
         res = client_admin_a.delete(detail_url(commercial_b.id))
-        assert res.status_code == status.HTTP_403_FORBIDDEN
+        assert res.status_code == status.HTTP_404_NOT_FOUND 
 
     def test_admin_ne_peut_pas_se_desactiver(self, client_admin_a, admin_a):
         res = client_admin_a.delete(detail_url(admin_a.id))
@@ -299,7 +299,7 @@ class TestUserResetPassword:
             "new_password": "NouveauPass123!",
             "new_password_confirm": "NouveauPass123!",
         })
-        assert res.status_code == status.HTTP_403_FORBIDDEN
+        assert res.status_code == status.HTTP_404_NOT_FOUND
 
     def test_superviseur_refuse(self, client_superviseur_a, commercial_a):
         res = client_superviseur_a.post(reset_url(commercial_a.id), {

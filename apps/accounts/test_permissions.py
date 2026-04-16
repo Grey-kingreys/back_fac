@@ -429,7 +429,7 @@ class IsolationIntegrationTest(TestCase):
         view_zones_a.request = request_a
         zones_a = view_zones_a.get_queryset()
 
-        view_depots_a = TestCompanyFilterViewSet(Depot.objects.all())
+        view_depots_a = TestDepotFilterViewSet(Depot.objects.all())
         view_depots_a.request = request_a
         depots_a = view_depots_a.get_queryset()
 
@@ -446,7 +446,7 @@ class IsolationIntegrationTest(TestCase):
         view_zones_b.request = request_b
         zones_b = view_zones_b.get_queryset()
 
-        view_depots_b = TestCompanyFilterViewSet(Depot.objects.all())
+        view_depots_b = TestDepotFilterViewSet(Depot.objects.all())
         view_depots_b.request = request_b
         depots_b = view_depots_b.get_queryset()
 
@@ -463,7 +463,7 @@ class IsolationIntegrationTest(TestCase):
         view_zones_admin_a.request = request_admin_a
         zones_admin_a = view_zones_admin_a.get_queryset()
 
-        view_depots_admin_a = TestCompanyFilterViewSet(Depot.objects.all())
+        view_depots_admin_a = TestDepotFilterViewSet(Depot.objects.all())
         view_depots_admin_a.request = request_admin_a
         depots_admin_a = view_depots_admin_a.get_queryset()
 

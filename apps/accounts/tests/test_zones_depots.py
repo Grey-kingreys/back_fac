@@ -88,7 +88,7 @@ class TestZoneDetail:
 
     def test_admin_refuse_zone_autre_company(self, client_admin_a, zone_b):
         res = client_admin_a.get(zone_url(zone_b.id))
-        assert res.status_code == status.HTTP_403_FORBIDDEN
+        assert res.status_code == status.HTTP_404_NOT_FOUND
 
     def test_404_zone_inexistante(self, client_admin_a):
         res = client_admin_a.get(zone_url(99999))
@@ -156,7 +156,7 @@ class TestZoneUpdate:
 
     def test_admin_refuse_zone_autre_company(self, client_admin_a, zone_b):
         res = client_admin_a.patch(zone_url(zone_b.id), {"description": "Hack"})
-        assert res.status_code == status.HTTP_403_FORBIDDEN
+        assert res.status_code == status.HTTP_404_NOT_FOUND
 
     def test_superviseur_refuse(self, client_superviseur_a, zone_a):
         res = client_superviseur_a.patch(zone_url(zone_a.id), {"description": "Hack"})
@@ -193,7 +193,7 @@ class TestZoneDestroy:
 
     def test_admin_refuse_zone_autre_company(self, client_admin_a, zone_b):
         res = client_admin_a.delete(zone_url(zone_b.id))
-        assert res.status_code == status.HTTP_403_FORBIDDEN
+        assert res.status_code == status.HTTP_404_NOT_FOUND
 
     def test_superviseur_refuse(self, client_superviseur_a, zone_a):
         res = client_superviseur_a.delete(zone_url(zone_a.id))
@@ -259,7 +259,7 @@ class TestDepotDetail:
 
     def test_admin_refuse_depot_autre_company(self, client_admin_a, depot_b):
         res = client_admin_a.get(depot_url(depot_b.id))
-        assert res.status_code == status.HTTP_403_FORBIDDEN
+        assert res.status_code == status.HTTP_404_NOT_FOUND
 
     def test_404_depot_inexistant(self, client_admin_a):
         res = client_admin_a.get(depot_url(99999))
@@ -321,7 +321,7 @@ class TestDepotUpdate:
 
     def test_admin_refuse_depot_autre_company(self, client_admin_a, depot_b):
         res = client_admin_a.patch(depot_url(depot_b.id), {"address": "Hack"})
-        assert res.status_code == status.HTTP_403_FORBIDDEN
+        assert res.status_code == status.HTTP_404_NOT_FOUND
 
     def test_deplacement_vers_zone_autre_company_refuse(self, client_admin_a, depot_a, zone_b):
         res = client_admin_a.patch(depot_url(depot_a.id), {"zone_id": zone_b.id})
@@ -351,7 +351,7 @@ class TestDepotDestroy:
 
     def test_admin_refuse_depot_autre_company(self, client_admin_a, depot_b):
         res = client_admin_a.delete(depot_url(depot_b.id))
-        assert res.status_code == status.HTTP_403_FORBIDDEN
+        assert res.status_code == status.HTTP_404_NOT_FOUND
 
     def test_superviseur_refuse(self, client_superviseur_a, depot_a):
         res = client_superviseur_a.delete(depot_url(depot_a.id))
@@ -372,7 +372,7 @@ class TestDepotDashboard:
 
     def test_dashboard_refuse_autre_company(self, client_admin_a, depot_b):
         res = client_admin_a.get(depot_dashboard_url(depot_b.id))
-        assert res.status_code == status.HTTP_403_FORBIDDEN
+        assert res.status_code == status.HTTP_404_NOT_FOUND
 
     def test_dashboard_superviseur_autorise(self, client_superviseur_a, depot_a):
         res = client_superviseur_a.get(depot_dashboard_url(depot_a.id))
