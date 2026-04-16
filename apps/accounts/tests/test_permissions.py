@@ -16,7 +16,7 @@ from apps.accounts.permissions import (
     IsCompanyMember,
     IsSupervisorOrAbove,
 )
-from apps.companies.models import Company, Depot, Zone
+from apps.companies.models import Zone
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Helpers locaux
