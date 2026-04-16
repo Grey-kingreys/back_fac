@@ -48,6 +48,7 @@ class CompanyFilterViewSet(CompanyFilterMixin, APIView):
         self.queryset = queryset
         super().__init__()
 
+
 class DepotFilterViewSetStub(CompanyFilterMixin, APIView):
     """ViewSet de test pour Depot — company accessible via zone."""
     company_lookup_field = 'zone__company'

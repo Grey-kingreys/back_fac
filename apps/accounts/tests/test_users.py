@@ -237,7 +237,7 @@ class TestUserDestroy:
 
     def test_admin_refuse_autre_company(self, client_admin_a, commercial_b):
         res = client_admin_a.delete(detail_url(commercial_b.id))
-        assert res.status_code == status.HTTP_404_NOT_FOUND 
+        assert res.status_code == status.HTTP_404_NOT_FOUND
 
     def test_admin_ne_peut_pas_se_desactiver(self, client_admin_a, admin_a):
         res = client_admin_a.delete(detail_url(admin_a.id))
