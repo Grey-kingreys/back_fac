@@ -11,7 +11,8 @@ Endpoints :
 """
 
 from django.shortcuts import get_object_or_404
-from drf_spectacular.utils import extend_schema, OpenApiResponse, OpenApiParameter
+
+from drf_spectacular.utils import OpenApiParameter, OpenApiResponse, extend_schema
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -19,9 +20,9 @@ from rest_framework.views import APIView
 
 from .models import Company
 from .serializers_company import (
-    CompanyListSerializer,
-    CompanyDetailSerializer,
     CompanyCreateSerializer,
+    CompanyDetailSerializer,
+    CompanyListSerializer,
     CompanyUpdateSerializer,
 )
 

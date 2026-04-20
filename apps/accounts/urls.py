@@ -8,10 +8,11 @@ R1-B09 — Routes Journal d'audit et connexion
 """
 
 from django.urls import include, path
+
 from rest_framework.routers import DefaultRouter
 
-from .views_users import UserViewSet
 from .audit_views import AuditLogListView, LoginLogListView
+from .views_users import UserViewSet
 
 router = DefaultRouter()
 router.register(r'users', UserViewSet, basename='user')

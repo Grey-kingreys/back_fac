@@ -12,10 +12,10 @@ class AccountsConfig(AppConfig):
         Connecte les signaux d'audit sur les modèles sensibles.
         Appelé une seule fois au démarrage de Django.
         """
-        from .signals import connect_audit_signals
-
         # Import différé des modèles pour éviter les imports circulaires
         from django.apps import apps
+
+        from .signals import connect_audit_signals
 
         models_to_audit = []
 

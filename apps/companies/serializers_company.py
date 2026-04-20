@@ -4,6 +4,7 @@ Serializers pour le CRUD Company — SuperAdmin uniquement.
 """
 
 from rest_framework import serializers
+
 from .models import Company
 
 
@@ -122,10 +123,12 @@ class CompanyCreateSerializer(serializers.ModelSerializer):
         return value
 
     def create(self, validated_data):
+        import uuid
+
         from django.contrib.auth import get_user_model
         from django.db import transaction
+
         from .services import send_first_login_email
-        import uuid
 
         email_admin = validated_data.pop('email_admin')
         User = get_user_model()

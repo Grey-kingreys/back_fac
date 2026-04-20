@@ -17,14 +17,14 @@ from django.db import models
 # Enum des rôles
 # ---------------------------------------------------------------------------
 class Role(models.TextChoices):
-    SUPERADMIN        = 'superadmin',        'Super Administrateur'
-    ADMIN             = 'admin',             'Administrateur'
-    SUPERVISEUR       = 'superviseur',       'Superviseur'
+    SUPERADMIN = 'superadmin', 'Super Administrateur'
+    ADMIN = 'admin', 'Administrateur'
+    SUPERVISEUR = 'superviseur', 'Superviseur'
     GESTIONNAIRE_STOCK = 'gestionnaire_stock', 'Gestionnaire de Stock'
-    CAISSIER          = 'caissier',          'Caissier'
-    CHAUFFEUR         = 'chauffeur',         'Chauffeur'
-    MAINTENANCIER     = 'maintenancier',     'Maintenancier'
-    COMMERCIAL        = 'commercial',        'Commercial'
+    CAISSIER = 'caissier', 'Caissier'
+    CHAUFFEUR = 'chauffeur', 'Chauffeur'
+    MAINTENANCIER = 'maintenancier', 'Maintenancier'
+    COMMERCIAL = 'commercial', 'Commercial'
 
 
 # ---------------------------------------------------------------------------

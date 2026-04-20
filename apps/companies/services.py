@@ -5,8 +5,10 @@ Utilisé pour l'envoi du lien de première connexion à l'Admin d'une company.
 """
 
 import logging
-import requests
+
 from django.conf import settings
+
+import requests
 
 logger = logging.getLogger(__name__)
 

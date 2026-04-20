@@ -4,8 +4,8 @@ R1-B09 — Modèles AuditLog et LoginLog
 Traçabilité complète des actions utilisateurs et des tentatives de connexion.
 """
 
-from django.db import models
 from django.conf import settings
+from django.db import models
 
 
 class AuditLog(models.Model):

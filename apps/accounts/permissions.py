@@ -193,12 +193,14 @@ class BaseCompanyPermission(permissions.BasePermission):
 # Classes de permission spécifiques pour faciliter l'utilisation
 class IsAdminOrSuperAdmin(BaseCompanyPermission):
     """Permission pour les admins et superadmins."""
+
     def __init__(self):
         super().__init__(allowed_roles=[Role.ADMIN, Role.SUPERADMIN])
 
 
 class IsSupervisorOrAbove(BaseCompanyPermission):
     """Permission pour les superviseurs et au-dessus."""
+
     def __init__(self):
         super().__init__(allowed_roles=[Role.SUPERVISEUR, Role.ADMIN, Role.SUPERADMIN])
 

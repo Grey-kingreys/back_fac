@@ -25,6 +25,7 @@ from apps.companies.models import Zone
 
 class FakeViewSet:
     """Simule un ViewSet pour les mixins qui ont besoin de self.request."""
+
     def __init__(self, queryset, request):
         self.queryset = queryset
         self.request = request

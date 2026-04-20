@@ -7,7 +7,8 @@ POST /api/auth/first-login/               — définir le mot de passe + activer
 """
 
 from django.contrib.auth import get_user_model
-from drf_spectacular.utils import extend_schema, OpenApiResponse, OpenApiParameter
+
+from drf_spectacular.utils import OpenApiParameter, OpenApiResponse, extend_schema
 from rest_framework import status
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response

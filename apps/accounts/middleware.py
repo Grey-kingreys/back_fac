@@ -40,7 +40,7 @@ class AuditMiddleware:
 
     def __call__(self, request):
         # Import différé pour éviter les imports circulaires au démarrage
-        from .signals import set_audit_context, clear_audit_context
+        from .signals import clear_audit_context, set_audit_context
 
         user = getattr(request, 'user', None)
         if user and not user.is_authenticated:

@@ -71,7 +71,7 @@ MIDDLEWARE = [
     # pour que request.user soit disponible
     "apps.accounts.middleware.AuditMiddleware",
     "apps.accounts.middleware.LoginLogMiddleware",
- 
+
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]

@@ -8,10 +8,11 @@ Routes complètes : Company (CRUD) + Zones + Dépôts
 """
 
 from django.urls import include, path
+
 from rest_framework.routers import DefaultRouter
 
-from .views import ZoneViewSet, DepotViewSet
-from .views_company import CompanyListCreateView, CompanyDetailView, CompanyToggleView
+from .views import DepotViewSet, ZoneViewSet
+from .views_company import CompanyDetailView, CompanyListCreateView, CompanyToggleView
 
 # Router pour Zones et Dépôts (ViewSets existants)
 router = DefaultRouter()

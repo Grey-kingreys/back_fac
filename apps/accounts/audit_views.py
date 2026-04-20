@@ -5,11 +5,10 @@ Accès Admin uniquement (IsAdminOrSuperAdmin).
 Filtres disponibles via query params.
 """
 
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework.generics import ListAPIView
 from rest_framework.permissions import IsAuthenticated
-
-from drf_spectacular.utils import extend_schema, OpenApiParameter
-from drf_spectacular.types import OpenApiTypes
 
 from .audit_models import AuditLog, LoginLog
 from .audit_serializers import AuditLogSerializer, LoginLogSerializer

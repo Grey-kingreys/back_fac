@@ -5,12 +5,13 @@ URLs d'authentification.
 """
 
 from django.urls import path
+
 from .views_auth import (
     LoginView,
     LogoutView,
     MeView,
-    PasswordResetRequestView,
     PasswordResetConfirmView,
+    PasswordResetRequestView,
     TokenRefreshView,
 )
 from .views_first_login import FirstLoginView

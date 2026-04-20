@@ -7,8 +7,8 @@ from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
 from django.utils.translation import gettext_lazy as _
 
-from .models import CustomUser
 from .audit_models import AuditLog, LoginLog
+from .models import CustomUser
 
 
 @admin.register(CustomUser)
