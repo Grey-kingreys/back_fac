@@ -12,3 +12,4 @@ pytest
 pytest-django
 flake8
 isort
+autopep8
