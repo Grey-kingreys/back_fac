@@ -62,14 +62,18 @@ INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
 # ---------------------------------------------------------------------------
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
-    "corsheaders.middleware.CorsMiddleware",          # CORS — doit être haut
+    "corsheaders.middleware.CorsMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+
+    # pour que request.user soit disponible
+    "apps.accounts.middleware.AuditMiddleware",
+    "apps.accounts.middleware.LoginLogMiddleware",
+ 
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
-    "apps.accounts.middleware.LoginLogMiddleware",
 ]
 
 ROOT_URLCONF = "config.urls"
@@ -91,7 +95,7 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = "config.wsgi.application"
-
+FRONTEND_URL = config("FRONTEND_URL", default="http://localhost:4200")
 # ---------------------------------------------------------------------------
 # Base de données - PostgreSQL
 # ---------------------------------------------------------------------------

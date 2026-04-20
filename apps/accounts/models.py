@@ -1,7 +1,12 @@
+# apps/accounts/models.py
 """
-apps/accounts/models.py
-Modèle utilisateur personnalisé avec rôles et multi-entreprises.
+Modèle utilisateur personnalisé.
+Ajout R1-B09 / Company flow :
+  - first_login_token : UUID usage unique pour la première connexion Admin
+  - first_login_done  : True une fois le mot de passe défini
 """
+
+import uuid
 
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
 from django.core.exceptions import ValidationError
@@ -12,24 +17,20 @@ from django.db import models
 # Enum des rôles
 # ---------------------------------------------------------------------------
 class Role(models.TextChoices):
-    SUPERADMIN = 'superadmin', 'Super Administrateur'
-    ADMIN = 'admin', 'Administrateur'
-    SUPERVISEUR = 'superviseur', 'Superviseur'
+    SUPERADMIN        = 'superadmin',        'Super Administrateur'
+    ADMIN             = 'admin',             'Administrateur'
+    SUPERVISEUR       = 'superviseur',       'Superviseur'
     GESTIONNAIRE_STOCK = 'gestionnaire_stock', 'Gestionnaire de Stock'
-    CAISSIER = 'caissier', 'Caissier'
-    CHAUFFEUR = 'chauffeur', 'Chauffeur'
-    MAINTENANCIER = 'maintenancier', 'Maintenancier'
-    COMMERCIAL = 'commercial', 'Commercial'
+    CAISSIER          = 'caissier',          'Caissier'
+    CHAUFFEUR         = 'chauffeur',         'Chauffeur'
+    MAINTENANCIER     = 'maintenancier',     'Maintenancier'
+    COMMERCIAL        = 'commercial',        'Commercial'
 
 
 # ---------------------------------------------------------------------------
-# Manager personnalisé
+# Manager
 # ---------------------------------------------------------------------------
 class CustomUserManager(BaseUserManager):
-    """
-    Manager qui utilise l'email comme identifiant unique
-    au lieu du username Django par défaut.
-    """
 
     def _create_user(self, email, password, **extra_fields):
         if not email:
@@ -51,12 +52,6 @@ class CustomUserManager(BaseUserManager):
         extra_fields.setdefault('is_superuser', True)
         extra_fields.setdefault('is_active', True)
         extra_fields.setdefault('role', Role.SUPERADMIN)
-
-        if extra_fields.get('is_staff') is not True:
-            raise ValueError("Le superuser doit avoir is_staff=True.")
-        if extra_fields.get('is_superuser') is not True:
-            raise ValueError("Le superuser doit avoir is_superuser=True.")
-
         return self._create_user(email, password, **extra_fields)
 
 
@@ -64,18 +59,11 @@ class CustomUserManager(BaseUserManager):
 # Modèle CustomUser
 # ---------------------------------------------------------------------------
 class CustomUser(AbstractBaseUser, PermissionsMixin):
-    """
-    Utilisateur personnalisé.
-    - Connexion par email (pas de username)
-    - Appartient obligatoirement à une Company (sauf le superadmin)
-    - Peut être rattaché à un Dépôt (optionnel)
-    - Son rôle détermine ses permissions dans toute l'app
-    """
 
     # ── Identification ──────────────────────────────────────────────────────
     email = models.EmailField(unique=True, verbose_name="Email")
-    first_name = models.CharField(max_length=100, verbose_name="Prénom")
-    last_name = models.CharField(max_length=100, verbose_name="Nom")
+    first_name = models.CharField(max_length=100, blank=True, verbose_name="Prénom")
+    last_name = models.CharField(max_length=100, blank=True, verbose_name="Nom")
     phone = models.CharField(max_length=20, blank=True, verbose_name="Téléphone")
 
     # ── Rattachement organisationnel ────────────────────────────────────────
@@ -88,7 +76,6 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
         blank=True,
     )
 
-    # ── CORRIGÉ R1-B08 : depot pointe maintenant sur companies.Depot ────────
     depot = models.ForeignKey(
         'companies.Depot',
         on_delete=models.SET_NULL,
@@ -117,18 +104,36 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
     # ── Sécurité ──────────────────────────────────────────────────────────────
     failed_attempts = models.PositiveSmallIntegerField(
         default=0,
-        verbose_name="Tentatives de connexion échouées",
+        verbose_name="Tentatives échouées",
     )
 
-    # ── Flags Django standard ─────────────────────────────────────────────────
+    # ── Première connexion Admin (créé par SuperAdmin) ─────────────────────────
+    first_login_token = models.UUIDField(
+        null=True,
+        blank=True,
+        unique=True,
+        verbose_name="Token de première connexion",
+        help_text=(
+            "UUID généré à la création par le SuperAdmin. "
+            "Usage unique — mis à None après utilisation."
+        )
+    )
+
+    first_login_done = models.BooleanField(
+        default=True,
+        verbose_name="Première connexion effectuée",
+        help_text=(
+            "False pour les Admins créés par le SuperAdmin, "
+            "jusqu'à ce qu'ils définissent leur mot de passe via le lien email."
+        )
+    )
+
+    # ── Flags Django ──────────────────────────────────────────────────────────
     is_active = models.BooleanField(default=True, verbose_name="Actif")
     is_staff = models.BooleanField(default=False, verbose_name="Staff admin")
-
-    # ── Métadonnées ────────────────────────────────────────────────────────────
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="Date de création")
     updated_at = models.DateTimeField(auto_now=True, verbose_name="Dernière modification")
 
-    # ── Configuration manager + champ de login ─────────────────────────────────
     objects = CustomUserManager()
 
     USERNAME_FIELD = 'email'
@@ -141,10 +146,11 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
 
     # ── Méthodes utilitaires ───────────────────────────────────────────────────
     def get_full_name(self):
-        return f"{self.first_name} {self.last_name}".strip()
+        full = f"{self.first_name} {self.last_name}".strip()
+        return full if full else self.email
 
     def get_short_name(self):
-        return self.first_name
+        return self.first_name or self.email
 
     def __str__(self):
         return f"{self.get_full_name()} <{self.email}> [{self.get_role_display()}]"
@@ -173,12 +179,15 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
     def clean(self):
         if self.role == Role.SUPERADMIN:
             if self.company_id is not None:
-                raise ValidationError("Le Super Administrateur ne doit pas être rattaché à une entreprise.")
+                raise ValidationError(
+                    "Le Super Administrateur ne doit pas être rattaché à une entreprise."
+                )
         else:
             if self.company_id is None:
-                raise ValidationError("Un utilisateur doit appartenir à une entreprise.")
+                raise ValidationError(
+                    "Un utilisateur doit appartenir à une entreprise."
+                )
 
-        # Le dépôt doit appartenir à la même company que l'utilisateur
         if self.depot_id and self.company_id:
             if self.depot.zone.company_id != self.company_id:
                 raise ValidationError(

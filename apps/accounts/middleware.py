@@ -1,26 +1,74 @@
-"""
-R1-B05 / R1-B09 — Middleware LoginLogMiddleware
-Enregistre chaque tentative de connexion (succès et échecs) dans LoginLog.
-Modèle LoginLog défini dans apps/accounts/models.py (R1-B09).
-
-À ajouter dans config/settings.py :
-    MIDDLEWARE = [
-        ...
-        "apps.accounts.middleware.LoginLogMiddleware",
-    ]
+# apps/accounts/middleware.py
 """
 
-import json
+1. AuditMiddleware  : injecte user + IP dans le thread-local d'audit
+                      (utilisé par les signaux pour alimenter AuditLog)
 
+2. LoginLogMiddleware : enregistre chaque tentative de connexion dans LoginLog
+"""
+
+import logging
+
+logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Utilitaire commun
+# ---------------------------------------------------------------------------
+
+def _get_client_ip(request) -> str:
+    x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+    if x_forwarded_for:
+        return x_forwarded_for.split(',')[0].strip()
+    return request.META.get('REMOTE_ADDR', '')
+
+
+# ---------------------------------------------------------------------------
+# 1. AuditMiddleware — thread-local pour les signaux
+# ---------------------------------------------------------------------------
+
+class AuditMiddleware:
+    """
+    Injecte l'utilisateur connecté et son IP dans le contexte thread-local.
+    Les signaux Django (signals.py) lisent ce contexte pour remplir AuditLog.
+
+    À placer APRÈS AuthenticationMiddleware dans MIDDLEWARE.
+    """
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        # Import différé pour éviter les imports circulaires au démarrage
+        from .signals import set_audit_context, clear_audit_context
+
+        user = getattr(request, 'user', None)
+        if user and not user.is_authenticated:
+            user = None
+
+        set_audit_context(user=user, ip=_get_client_ip(request))
+        try:
+            response = self.get_response(request)
+        finally:
+            clear_audit_context()
+
+        return response
+
+
+# ---------------------------------------------------------------------------
+# 2. LoginLogMiddleware — enregistre les tentatives de connexion
+# ---------------------------------------------------------------------------
 
 class LoginLogMiddleware:
     """
     Intercepte les réponses sur /api/auth/login/ et enregistre le résultat
     dans LoginLog (succès si status 200, échec sinon).
-    Ignoré silencieusement si LoginLog n'existe pas encore (avant R1-B09).
+
+    Ignoré silencieusement si LoginLog n'existe pas encore.
+    Compatibilité : fonctionne avec les deux systèmes de settings du projet.
     """
 
-    LOGIN_PATH = "/api/auth/login/"
+    LOGIN_PATH = '/api/auth/login/'
 
     def __init__(self, get_response):
         self.get_response = get_response
@@ -28,15 +76,14 @@ class LoginLogMiddleware:
     def __call__(self, request):
         response = self.get_response(request)
 
-        if request.path == self.LOGIN_PATH and request.method == "POST":
+        if request.path == self.LOGIN_PATH and request.method == 'POST':
             self._log_attempt(request, response)
 
         return response
 
     def _log_attempt(self, request, response):
-        # LoginLog sera créé au ticket R1-B09 — on ignore si absent
         try:
-            from .models import LoginLog
+            from .audit_models import LoginLog
         except ImportError:
             return
 
@@ -46,28 +93,23 @@ class LoginLogMiddleware:
         success = response.status_code == 200
         user = None
 
-        # Tentative de récupération de l'utilisateur
+        email = None
+
         try:
-            body = json.loads(request.body.decode("utf-8"))
-            email = body.get("email", "")
-            user = User.objects.filter(email=email).first()
-        except (json.JSONDecodeError, UnicodeDecodeError):
+            if hasattr(request, 'data'):
+                email = request.data.get('email')
+        except Exception:
             pass
+
+        if email:
+            user = User.objects.filter(email=email).first()
 
         try:
             LoginLog.objects.create(
                 user=user,
-                ip_address=self._get_client_ip(request),
-                user_agent=request.META.get("HTTP_USER_AGENT", "")[:255],
+                ip_address=_get_client_ip(request),
+                user_agent=request.META.get('HTTP_USER_AGENT', '')[:512],
                 success=success,
             )
-        except Exception:
-            # Ne jamais bloquer la réponse à cause du log
-            pass
-
-    @staticmethod
-    def _get_client_ip(request) -> str:
-        x_forwarded_for = request.META.get("HTTP_X_FORWARDED_FOR")
-        if x_forwarded_for:
-            return x_forwarded_for.split(",")[0].strip()
-        return request.META.get("REMOTE_ADDR", "")
+        except Exception as e:
+            logger.warning(f'[LoginLog] Échec enregistrement : {e}')
