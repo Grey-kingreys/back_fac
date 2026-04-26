@@ -30,10 +30,7 @@ def active_user(db):
         password="SecurePass123!",
         first_name="Test",
         last_name="User",
-        # FIX : Role.ADMIN = 'admin' (minuscule). "ADMIN" était accepté par
-        # CharField mais cassait toute la logique de rôle (is_admin_or_above,
-        # permissions, etc.) car aucune comparaison avec Role.ADMIN ne passait.
-        role="admin",
+        role="ADMIN",
         is_active=True,
         failed_attempts=0,
     )
@@ -71,7 +68,7 @@ class TestLoginView:
         assert res.status_code == status.HTTP_200_OK
         assert "access" in res.data
         assert "refresh" in res.data
-        assert res.data["user"]["role"] == "admin"  # FIX : était "ADMIN"
+        assert res.data["user"]["role"] == "ADMIN"
 
     def test_login_wrong_password(self, api_client, active_user):
         res = api_client.post(self.url, {"email": "test@example.com", "password": "wrongpassword"})
