@@ -115,6 +115,22 @@ DATABASES = {
 }
 
 # ---------------------------------------------------------------------------
+# Cache — Redis
+# ---------------------------------------------------------------------------
+REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.redis.RedisCache",
+        "LOCATION": REDIS_URL,
+        "OPTIONS": {
+            "socket_connect_timeout": 5,
+            "socket_timeout": 5,
+        },
+    }
+}
+
+# ---------------------------------------------------------------------------
 # Validation des mots de passe
 # ---------------------------------------------------------------------------
 AUTH_PASSWORD_VALIDATORS = [

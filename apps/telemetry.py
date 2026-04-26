@@ -5,7 +5,7 @@ Appelé depuis config/wsgi.py et config/asgi.py AVANT le chargement Django.
 
 Instrumente automatiquement :
 - Django (requêtes HTTP)
-- psycopg2 (requêtes PostgreSQL)
+- psycopg3 (requêtes PostgreSQL)
 - Redis (blacklist JWT)
 - Requests (appels Resend)
 """
@@ -14,7 +14,7 @@ import os
 from opentelemetry import trace
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 from opentelemetry.instrumentation.django import DjangoInstrumentor
-from opentelemetry.instrumentation.psycopg import Psycopg2Instrumentor
+from opentelemetry.instrumentation.psycopg import PsycopgInstrumentor
 from opentelemetry.instrumentation.redis import RedisInstrumentor
 from opentelemetry.instrumentation.requests import RequestsInstrumentor
 from opentelemetry.sdk.resources import SERVICE_NAME, SERVICE_VERSION, Resource
@@ -52,6 +52,6 @@ def setup_tracing():
 
     # Instrumentation automatique
     DjangoInstrumentor().instrument()
-    Psycopg2Instrumentor().instrument()
+    PsycopgInstrumentor().instrument()  # FIX : était Psycopg2Instrumentor()
     RedisInstrumentor().instrument()
     RequestsInstrumentor().instrument()
