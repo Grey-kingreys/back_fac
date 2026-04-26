@@ -3,9 +3,10 @@ config/settings.py
 Paramètres Django — Application Gestion Intégrée Multi-Sites
 """
 
+import os
 from datetime import timedelta
 from pathlib import Path
-import os
+
 from dotenv import load_dotenv
 
 # Charger les variables d'environnement depuis .env
