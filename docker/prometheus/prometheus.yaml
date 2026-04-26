@@ -1,0 +1,42 @@
+# docker/prometheus/prometheus.yaml
+# Prometheus scrape les métriques Django toutes les 15s
+# et les envoie à Mimir via remote_write.
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  scrape_timeout: 10s
+
+# ── Remote Write vers Mimir ───────────────────────────────────────────────
+remote_write:
+  - url: http://mimir:9009/api/v1/push
+    headers:
+      X-Scope-OrgID: anonymous
+
+# ── Scrape configs ────────────────────────────────────────────────────────
+scrape_configs:
+
+  # Django — métriques exposées par django-prometheus sur /metrics
+  - job_name: django
+    static_configs:
+      - targets:
+          - backend:8000
+    metrics_path: /metrics
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: gestion_backend
+
+  # Prometheus lui-même
+  - job_name: prometheus
+    static_configs:
+      - targets:
+          - localhost:9090
+
+  # cAdvisor — métriques système des containers
+  - job_name: cadvisor
+    static_configs:
+      - targets:
+          - cadvisor:8080
+        labels:
+          instance: docker
