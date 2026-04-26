@@ -1,15 +1,66 @@
+# Django
 Django>=5.1,<6.0
+
+# Django REST Framework
 djangorestframework>=3.15,<4.0
-psycopg2-binary>=2.9
 djangorestframework-simplejwt>=5.3
 django-cors-headers>=4.3
-python-decouple>=3.8
 drf-spectacular>=0.27
-Pillow>=10.0
 django-filter>=24.0
-resend
-pytest
-pytest-django
-flake8
-isort
-autopep8
+
+# Base de données PostgreSQL
+psycopg[binary]>=3.2
+
+# Variables d'environnement
+python-dotenv>=1.0
+
+# Images - Upload photos
+Pillow>=10.0
+
+# PDF - Génération reçus et rapports
+reportlab>=4.2
+
+# QR Code
+qrcode[pil]>=8.0
+
+# Fichiers statiques - Production
+whitenoise>=6.7
+
+# Serveur WSGI - Production
+gunicorn>=23.0
+
+# Emails
+resend>=2.27
+requests>=2.32
+
+# Monitoring
+django-prometheus>=2.3
+
+# Celery & Redis
+celery>=5.4
+django-celery-beat>=2.7
+redis>=5.2
+
+# Excel
+openpyxl>=3.1
+
+# Logging structuré
+python-json-logger>=2.0
+opentelemetry-instrumentation-logging>=0.48b0
+opentelemetry-instrumentation-celery>=0.48b0
+
+# OpenTelemetry — Distributed Tracing (Tempo)
+opentelemetry-api>=1.27
+opentelemetry-sdk>=1.27
+opentelemetry-instrumentation-django>=0.48b0
+opentelemetry-instrumentation-psycopg>=0.48b0
+opentelemetry-instrumentation-redis>=0.48b0
+opentelemetry-instrumentation-requests>=0.48b0
+opentelemetry-exporter-otlp-proto-http>=1.27
+
+# Outils de développement (optionnels, à mettre dans dev-requirements.txt si possible)
+pytest>=8.0
+pytest-django>=4.8
+flake8>=7.0
+isort>=5.13
+autopep8>=2.3

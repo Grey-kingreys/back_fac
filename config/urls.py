@@ -31,12 +31,9 @@ urlpatterns = [
 
     # --- Apps métier (à décommenter au fur et à mesure) ---
     path("api/", include("apps.companies.urls")),
-    # path("api/", include("apps.produits.urls")),
-    # path("api/", include("apps.stocks.urls")),
-    # path("api/", include("apps.ventes.urls")),
-    # path("api/", include("apps.finance.urls")),
-    # path("api/", include("apps.logistique.urls")),
-    # path("api/", include("apps.rh.urls")),
+
+    # --- Prometheus metrics endpoint (/metrics) ---
+    path("", include("django_prometheus.urls")),
 ]
 
 # Servir les fichiers médias en développement

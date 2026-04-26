@@ -10,9 +10,9 @@ echo "========================================"
 # ── 1. Attente PostgreSQL ─────────────────────────────────────────────
 echo "[1/4] Attente de PostgreSQL..."
 until python -c "
-import psycopg2, os, sys
+import psycopg, os, sys
 try:
-    conn = psycopg2.connect(
+    conn = psycopg.connect(
         dbname=os.getenv('DB_NAME'),
         user=os.getenv('DB_USER'),
         password=os.getenv('DB_PASSWORD'),
@@ -20,9 +20,9 @@ try:
         port=os.getenv('DB_PORT', '5432'),
     )
     conn.close()
-    print('  PostgreSQL prêt')
+    print('  PostgreSQL pret')
 except Exception as e:
-    print(f'  Pas encore prêt : {e}')
+    print(f'  Pas encore pret : {e}')
     sys.exit(1)
 "; do
   sleep 2

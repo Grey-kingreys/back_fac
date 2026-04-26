@@ -3,10 +3,14 @@ config/settings.py
 Paramètres Django — Application Gestion Intégrée Multi-Sites
 """
 
+import os
 from datetime import timedelta
 from pathlib import Path
 
-from decouple import config
+from dotenv import load_dotenv
+
+# Charger les variables d'environnement depuis .env
+load_dotenv()
 
 # ---------------------------------------------------------------------------
 # Chemins
@@ -16,9 +20,9 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # ---------------------------------------------------------------------------
 # Sécurité
 # ---------------------------------------------------------------------------
-SECRET_KEY = config("SECRET_KEY")
-DEBUG = config("DEBUG", default=False, cast=bool)
-ALLOWED_HOSTS = config("ALLOWED_HOSTS", default="localhost,127.0.0.1").split(",")
+SECRET_KEY = os.getenv("SECRET_KEY")
+DEBUG = os.getenv("DEBUG", "False") == "True"
+ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "localhost,127.0.0.1").split(",")
 
 # ---------------------------------------------------------------------------
 # Applications installées
@@ -33,6 +37,7 @@ DJANGO_APPS = [
 ]
 
 THIRD_PARTY_APPS = [
+    "django_prometheus",           # Métriques Prometheus — doit être en premier
     "rest_framework",
     "rest_framework_simplejwt",
     "rest_framework_simplejwt.token_blacklist",
@@ -42,11 +47,8 @@ THIRD_PARTY_APPS = [
 ]
 
 LOCAL_APPS = [
-    # Les apps métier seront ajoutées ici au fur et à mesure
     'apps.companies',
     "apps.accounts",
-    # "apps.entreprises",
-    # "apps.zones",
     # "apps.produits",
     # "apps.stocks",
     # "apps.ventes",
@@ -61,19 +63,20 @@ INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
 # Middleware
 # ---------------------------------------------------------------------------
 MIDDLEWARE = [
+    # PrometheusBeforeMiddleware DOIT être le premier
+    "django_prometheus.middleware.PrometheusBeforeMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "corsheaders.middleware.CorsMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
-
-    # pour que request.user soit disponible
     "apps.accounts.middleware.AuditMiddleware",
     "apps.accounts.middleware.LoginLogMiddleware",
-
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    # PrometheusAfterMiddleware DOIT être le dernier
+    "django_prometheus.middleware.PrometheusAfterMiddleware",
 ]
 
 ROOT_URLCONF = "config.urls"
@@ -95,18 +98,19 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = "config.wsgi.application"
-FRONTEND_URL = config("FRONTEND_URL", default="http://localhost:4200")
+FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:4200")
+
 # ---------------------------------------------------------------------------
 # Base de données - PostgreSQL
 # ---------------------------------------------------------------------------
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.postgresql",
-        "NAME": config("DB_NAME"),
-        "USER": config("DB_USER"),
-        "PASSWORD": config("DB_PASSWORD"),
-        "HOST": config("DB_HOST", default="localhost"),
-        "PORT": config("DB_PORT", default="5432"),
+        "NAME": os.getenv("DB_NAME"),
+        "USER": os.getenv("DB_USER"),
+        "PASSWORD": os.getenv("DB_PASSWORD"),
+        "HOST": os.getenv("DB_HOST", "localhost"),
+        "PORT": os.getenv("DB_PORT", "5432"),
     }
 }
 
@@ -164,8 +168,8 @@ REST_FRAMEWORK = {
 # JWT — SimpleJWT
 # ---------------------------------------------------------------------------
 SIMPLE_JWT = {
-    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=config("JWT_ACCESS_MINUTES", default=60, cast=int)),
-    "REFRESH_TOKEN_LIFETIME": timedelta(days=config("JWT_REFRESH_DAYS", default=7, cast=int)),
+    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=int(os.getenv("JWT_ACCESS_MINUTES", 60))),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=int(os.getenv("JWT_REFRESH_DAYS", 7))),
     "ROTATE_REFRESH_TOKENS": True,
     "BLACKLIST_AFTER_ROTATION": True,
     "AUTH_HEADER_TYPES": ("Bearer",),
@@ -174,9 +178,9 @@ SIMPLE_JWT = {
 # ---------------------------------------------------------------------------
 # CORS
 # ---------------------------------------------------------------------------
-CORS_ALLOWED_ORIGINS = config(
+CORS_ALLOWED_ORIGINS = os.getenv(
     "CORS_ALLOWED_ORIGINS",
-    default="http://localhost:4200",  # Angular dev server
+    "http://localhost:4200"
 ).split(",")
 
 CORS_ALLOW_CREDENTIALS = True
@@ -198,6 +202,5 @@ SPECTACULAR_SETTINGS = {
 # ---------------------------------------------------------------------------
 # Resend
 # ---------------------------------------------------------------------------
-RESEND_KEY = config("RESEND_KEY", default="")
-RESEND_FROM_EMAIL = config("RESEND_FROM_EMAIL", default="onboarding@resend.dev")
-FRONTEND_URL = config("FRONTEND_URL", default="http://localhost:4200")
+RESEND_KEY = os.getenv("RESEND_KEY", "")
+RESEND_FROM_EMAIL = os.getenv("RESEND_FROM_EMAIL", "onboarding@resend.dev")

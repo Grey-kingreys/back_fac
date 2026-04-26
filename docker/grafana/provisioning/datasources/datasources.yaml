@@ -1,0 +1,61 @@
+# docker/grafana/provisioning/datasources/datasources.yaml
+# Provisioning automatique des datasources Grafana au démarrage.
+# Loki, Mimir (métriques), Tempo (traces) — tous reliés entre eux.
+
+apiVersion: 1
+
+datasources:
+  # Loki — logs des containers
+  - name: Loki
+    type: loki
+    access: proxy
+    url: http://loki:3100
+    isDefault: false
+    version: 1
+    editable: true
+    jsonData:
+      maxLines: 1000
+
+  # Mimir — métriques long terme (API compatible Prometheus)
+  - name: Mimir
+    type: prometheus
+    access: proxy
+    url: http://mimir:9009/prometheus
+    isDefault: true
+    version: 1
+    editable: true
+    jsonData:
+      httpMethod: POST
+      httpHeaderName1: X-Scope-OrgID
+    secureJsonData:
+      httpHeaderValue1: anonymous
+
+  # Tempo — traces distribuées (OpenTelemetry)
+  - name: Tempo
+    type: tempo
+    access: proxy
+    url: http://tempo:3200
+    isDefault: false
+    version: 1
+    editable: true
+    jsonData:
+      httpMethod: GET
+      serviceMap:
+        datasourceUid: mimir
+      nodeGraph:
+        enabled: true
+      tracesToLogs:
+        datasourceUid: loki
+        tags: ["service.name"]
+        mappedTags:
+          - key: service.name
+            value: service_name
+        filterByTraceID: true
+        filterBySpanID: false
+      tracesToMetrics:
+        datasourceUid: mimir
+        tags:
+          - key: service.name
+            value: service_name
+      lokiSearch:
+        datasourceUid: loki
