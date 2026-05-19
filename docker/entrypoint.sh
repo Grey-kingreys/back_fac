@@ -39,8 +39,12 @@ python manage.py makemigrations accounts  --no-input || echo "  [WARN] accounts 
 echo "[3/4] Application des migrations..."
 python manage.py migrate --no-input
 
-# ── 4. Collectstatic ─────────────────────────────────────────────────
-echo "[4/4] Collectstatic..."
+# ── 4. Seed Super Admin ────────────────────────────────────────────────
+echo "[4/5] Création du super admin (si nécessaire)..."
+python manage.py seed_superadmin || echo "  [INFO] Super admin déjà existant ou erreur"
+
+# ── 5. Collectstatic ─────────────────────────────────────────────────
+echo "[5/5] Collectstatic..."
 python manage.py collectstatic --no-input --clear
 
 echo "========================================"
