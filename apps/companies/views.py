@@ -40,6 +40,7 @@ from .serializers import (
     ZoneListSerializer,
 )
 
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Mixin commun : permissions + vérification company
 # ─────────────────────────────────────────────────────────────────────────────

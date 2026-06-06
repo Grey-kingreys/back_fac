@@ -9,30 +9,53 @@ class AccountsConfig(AppConfig):
 
     def ready(self):
         """
-        Connecte les signaux d'audit sur les modèles sensibles.
+        Connecte les signaux d'audit sur tous les modèles sensibles.
         Appelé une seule fois au démarrage de Django.
         """
-        # Import différé des modèles pour éviter les imports circulaires
         from django.apps import apps
 
         from .signals import connect_audit_signals
 
         models_to_audit = []
 
-        # CustomUser (toujours disponible)
-        try:
-            CustomUser = apps.get_model('accounts', 'CustomUser')
-            models_to_audit.append(CustomUser)
-        except LookupError:
-            pass
+        _try_models = [
+            # Accounts & companies
+            ('accounts', 'CustomUser'),
+            ('companies', 'Zone'),
+            ('companies', 'Depot'),
+            # Produits
+            ('produits', 'Produit'),
+            ('produits', 'Fournisseur'),
+            ('produits', 'Categorie'),
+            # Stocks
+            ('stocks', 'TransfertStock'),
+            ('stocks', 'MouvementStock'),
+            # Ventes
+            ('ventes', 'Commande'),
+            ('ventes', 'Paiement'),
+            ('ventes', 'Client'),
+            # Finance
+            ('finance', 'TauxChange'),
+            ('finance', 'CaissePhysique'),
+            ('finance', 'SessionCaisse'),
+            ('finance', 'TransactionCaisse'),
+            ('finance', 'CompteMobileMoney'),
+            ('finance', 'TransactionMobileMoney'),
+            # Logistique
+            ('logistique', 'Vehicule'),
+            ('logistique', 'Mission'),
+            # RH
+            ('rh', 'Employe'),
+            ('rh', 'Conge'),
+            ('rh', 'Document'),
+        ]
 
-        # Zone et Depot (apps.companies)
-        try:
-            Zone = apps.get_model('companies', 'Zone')
-            Depot = apps.get_model('companies', 'Depot')
-            models_to_audit.extend([Zone, Depot])
-        except LookupError:
-            pass
+        for app_label, model_name in _try_models:
+            try:
+                model = apps.get_model(app_label, model_name)
+                models_to_audit.append(model)
+            except LookupError:
+                pass
 
         if models_to_audit:
             connect_audit_signals(*models_to_audit)

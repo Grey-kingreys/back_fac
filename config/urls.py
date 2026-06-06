@@ -14,6 +14,7 @@ from drf_spectacular.views import (
     SpectacularSwaggerView,
 )
 
+
 urlpatterns = [
     # Admin Django
     path("admin/", admin.site.urls),
@@ -29,8 +30,14 @@ urlpatterns = [
     path("api/schema/docs/", SpectacularSwaggerView.as_view(url_name="schema"), name="swagger-ui"),
     path("api/schema/redoc/", SpectacularRedocView.as_view(url_name="schema"), name="redoc"),
 
-    # --- Apps métier (à décommenter au fur et à mesure) ---
+    # --- Apps métier ---
     path("api/", include("apps.companies.urls")),
+    path("api/", include("apps.produits.urls")),
+    path("api/", include("apps.stocks.urls")),
+    path("api/", include("apps.ventes.urls")),
+    path("api/", include("apps.finance.urls")),
+    path("api/", include("apps.logistique.urls")),
+    path("api/", include("apps.rh.urls")),
 
     # --- Prometheus metrics endpoint (/metrics) ---
     path("", include("django_prometheus.urls")),

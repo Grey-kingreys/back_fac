@@ -22,6 +22,7 @@ from apps.accounts.permissions import (
 )
 from apps.companies.models import Company, Depot, Zone
 
+
 User = get_user_model()
 
 

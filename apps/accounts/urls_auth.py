@@ -7,6 +7,7 @@ URLs d'authentification.
 from django.urls import path
 
 from .views_auth import (
+    ChangePasswordView,
     LoginView,
     LogoutView,
     MeView,
@@ -16,12 +17,14 @@ from .views_auth import (
 )
 from .views_first_login import FirstLoginView
 
+
 urlpatterns = [
     # ── Auth standard ─────────────────────────────────────────────────────
     path('login/', LoginView.as_view(), name='auth-login'),
     path('refresh/', TokenRefreshView.as_view(), name='auth-refresh'),
     path('logout/', LogoutView.as_view(), name='auth-logout'),
     path('me/', MeView.as_view(), name='auth-me'),
+    path('me/change-password/', ChangePasswordView.as_view(), name='auth-change-password'),
 
     # ── Réinitialisation mot de passe (self-service) ───────────────────────
     path('password-reset/', PasswordResetRequestView.as_view(), name='auth-password-reset'),

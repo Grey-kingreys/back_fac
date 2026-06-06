@@ -16,6 +16,7 @@ from django.db.models.signals import post_delete, post_save, pre_save
 from django.dispatch import receiver
 from django.forms.models import model_to_dict
 
+
 # Thread-local pour stocker l'utilisateur et l'IP courants
 # (mis à jour par AuditMiddleware à chaque requête)
 _audit_context = threading.local()

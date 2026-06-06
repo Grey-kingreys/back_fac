@@ -14,6 +14,7 @@ from rest_framework.routers import DefaultRouter
 from .audit_views import AuditLogListView, LoginLogListView
 from .views_users import UserViewSet
 
+
 router = DefaultRouter()
 router.register(r'users', UserViewSet, basename='user')
 

@@ -10,6 +10,7 @@ from django.conf import settings
 
 import requests
 
+
 logger = logging.getLogger(__name__)
 
 RESEND_API_URL = "https://api.resend.com/emails"

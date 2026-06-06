@@ -9,6 +9,7 @@ from rest_framework import status
 
 from apps.accounts.models import CustomUser, Role
 
+
 USERS_URL = "/api/users/"
 
 

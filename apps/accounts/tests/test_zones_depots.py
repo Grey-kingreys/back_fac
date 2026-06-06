@@ -9,6 +9,7 @@ from rest_framework import status
 
 from apps.companies.models import Depot, Zone
 
+
 ZONES_URL = "/api/zones/"
 DEPOTS_URL = "/api/depots/"
 

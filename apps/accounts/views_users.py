@@ -31,6 +31,7 @@ from apps.accounts.serializers import (
     UserUpdateSerializer,
 )
 
+
 User = get_user_model()
 
 

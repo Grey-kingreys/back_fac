@@ -40,11 +40,15 @@ echo "[3/4] Application des migrations..."
 python manage.py migrate --no-input
 
 # ── 4. Seed Super Admin ────────────────────────────────────────────────
-echo "[4/5] Création du super admin (si nécessaire)..."
+echo "[4/6] Création du super admin (si nécessaire)..."
 python manage.py seed_superadmin || echo "  [INFO] Super admin déjà existant ou erreur"
 
-# ── 5. Collectstatic ─────────────────────────────────────────────────
-echo "[5/5] Collectstatic..."
+# ── 5. Seed données de démo ───────────────────────────────────────────
+echo "[5/6] Seed données de démo (entreprise, zones, dépôts, utilisateurs)..."
+python manage.py seed_demo_data || echo "  [WARN] Erreur lors du seed démo"
+
+# ── 6. Collectstatic ─────────────────────────────────────────────────
+echo "[6/6] Collectstatic..."
 python manage.py collectstatic --no-input --clear
 
 echo "========================================"

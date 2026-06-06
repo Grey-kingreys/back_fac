@@ -10,6 +10,7 @@ from rest_framework import serializers
 
 from apps.companies.models import Depot
 
+
 User = get_user_model()
 
 
