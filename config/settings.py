@@ -9,6 +9,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
+
 # Charger les variables d'environnement depuis .env
 load_dotenv()
 
@@ -49,12 +50,12 @@ THIRD_PARTY_APPS = [
 LOCAL_APPS = [
     'apps.companies',
     "apps.accounts",
-    # "apps.produits",
-    # "apps.stocks",
-    # "apps.ventes",
-    # "apps.finance",
-    # "apps.logistique",
-    # "apps.rh",
+    "apps.produits",
+    "apps.stocks",
+    "apps.ventes",
+    "apps.finance",
+    "apps.logistique",
+    "apps.rh",
 ]
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS

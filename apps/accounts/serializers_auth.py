@@ -7,6 +7,7 @@ from django.contrib.auth.password_validation import validate_password
 
 from rest_framework import serializers
 
+
 User = get_user_model()
 
 
@@ -89,4 +90,41 @@ class PasswordResetConfirmSerializer(serializers.Serializer):
             )
         # Validation Django (longueur, complexité, etc.)
         validate_password(attrs["new_password"])
+        return attrs
+
+
+class MeUpdateSerializer(serializers.ModelSerializer):
+    """
+    Modification du profil par l'utilisateur connecté lui-même.
+    Seuls first_name, last_name, phone et avatar sont modifiables.
+    """
+
+    class Meta:
+        model = User
+        fields = ["first_name", "last_name", "phone", "avatar"]
+        extra_kwargs = {
+            "avatar": {"required": False, "allow_null": True},
+        }
+
+
+class ChangePasswordSerializer(serializers.Serializer):
+    """
+    Changement de mot de passe par l'utilisateur lui-même.
+    Requiert l'ancien mot de passe pour confirmation.
+    """
+    current_password = serializers.CharField(write_only=True, trim_whitespace=False)
+    new_password = serializers.CharField(
+        write_only=True, trim_whitespace=False, validators=[validate_password]
+    )
+    new_password_confirm = serializers.CharField(write_only=True, trim_whitespace=False)
+
+    def validate(self, attrs):
+        if attrs["new_password"] != attrs["new_password_confirm"]:
+            raise serializers.ValidationError(
+                {"new_password_confirm": "Les mots de passe ne correspondent pas."}
+            )
+        if attrs["current_password"] == attrs["new_password"]:
+            raise serializers.ValidationError(
+                {"new_password": "Le nouveau mot de passe doit être différent de l'ancien."}
+            )
         return attrs

@@ -18,6 +18,7 @@ from apps.accounts.permissions import (
 )
 from apps.companies.models import Zone
 
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Helpers locaux
 # ─────────────────────────────────────────────────────────────────────────────

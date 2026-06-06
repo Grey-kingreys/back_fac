@@ -14,6 +14,7 @@ from rest_framework.routers import DefaultRouter
 from .views import DepotViewSet, ZoneViewSet
 from .views_company import CompanyDetailView, CompanyListCreateView, CompanyToggleView
 
+
 # Router pour Zones et Dépôts (ViewSets existants)
 router = DefaultRouter()
 router.register(r'zones', ZoneViewSet, basename='zone')

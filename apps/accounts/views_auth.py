@@ -17,15 +17,18 @@ from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from .serializers_auth import (
+    ChangePasswordSerializer,
     LoginSerializer,
     MeSerializer,
     MessageSerializer,
+    MeUpdateSerializer,
     PasswordResetConfirmSerializer,
     PasswordResetRequestSerializer,
     TokenRefreshSerializer,
     TokenResponseSerializer,
 )
 from .services import send_password_reset_email
+
 
 User = get_user_model()
 
@@ -225,6 +228,18 @@ class MeView(APIView):
         serializer = MeSerializer(request.user, context={"request": request})
         return Response(serializer.data, status=status.HTTP_200_OK)
 
+    def patch(self, request):
+        serializer = MeUpdateSerializer(
+            request.user, data=request.data, partial=True, context={"request": request}
+        )
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        # Retourner le profil complet mis à jour
+        return Response(
+            MeSerializer(request.user, context={"request": request}).data,
+            status=status.HTTP_200_OK,
+        )
+
 
 # ──────────────────────────────────────────────────────────────────────────────
 # POST /api/auth/password-reset/
@@ -335,5 +350,42 @@ class PasswordResetConfirmView(APIView):
 
         return Response(
             {"detail": "Mot de passe réinitialisé avec succès."},
+            status=status.HTTP_200_OK,
+        )
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# POST /api/auth/me/change-password/
+# ──────────────────────────────────────────────────────────────────────────────
+@extend_schema(
+    tags=["Auth"],
+    summary="Changer son mot de passe",
+    description="L'utilisateur connecté change son propre mot de passe. L'ancien mot de passe est requis.",
+    request=ChangePasswordSerializer,
+    responses={
+        200: MessageSerializer,
+        400: OpenApiResponse(description="Ancien mot de passe incorrect ou mots de passe identiques"),
+    },
+)
+class ChangePasswordView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        serializer = ChangePasswordSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        user = request.user
+        if not user.check_password(serializer.validated_data["current_password"]):
+            return Response(
+                {"current_password": "Mot de passe actuel incorrect."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        user.set_password(serializer.validated_data["new_password"])
+        user.failed_attempts = 0
+        user.save(update_fields=["password", "failed_attempts"])
+
+        return Response(
+            {"detail": "Mot de passe modifié avec succès."},
             status=status.HTTP_200_OK,
         )
