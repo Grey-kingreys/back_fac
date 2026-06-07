@@ -42,8 +42,8 @@ USER django
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    # Pointe sur config.settings (et non backend.settings)
-    DJANGO_SETTINGS_MODULE=config.settings
+    DJANGO_SETTINGS_MODULE=config.settings \
+    HOME=/tmp
 
 EXPOSE 8000
 
