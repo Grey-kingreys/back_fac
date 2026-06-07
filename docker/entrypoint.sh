@@ -11,14 +11,18 @@ echo "========================================"
 echo "[1/4] Attente de PostgreSQL..."
 until python -c "
 import psycopg, os, sys
+db_url = os.getenv('DATABASE_URL')
 try:
-    conn = psycopg.connect(
-        dbname=os.getenv('DB_NAME'),
-        user=os.getenv('DB_USER'),
-        password=os.getenv('DB_PASSWORD'),
-        host=os.getenv('DB_HOST'),
-        port=os.getenv('DB_PORT', '5432'),
-    )
+    if db_url:
+        conn = psycopg.connect(db_url)
+    else:
+        conn = psycopg.connect(
+            dbname=os.getenv('DB_NAME'),
+            user=os.getenv('DB_USER'),
+            password=os.getenv('DB_PASSWORD'),
+            host=os.getenv('DB_HOST'),
+            port=os.getenv('DB_PORT', '5432'),
+        )
     conn.close()
     print('  PostgreSQL pret')
 except Exception as e:
