@@ -10,6 +10,7 @@ django-filter>=24.0
 
 # Base de données PostgreSQL
 psycopg[binary]>=3.2
+dj-database-url>=2.1
 
 # Variables d'environnement
 python-dotenv>=1.0

@@ -104,17 +104,23 @@ FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:4200")
 
 # ---------------------------------------------------------------------------
 # Base de données - PostgreSQL
+# Priorité : DATABASE_URL (Railway/Neon) → variables individuelles (Docker local)
 # ---------------------------------------------------------------------------
-DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.postgresql",
-        "NAME": os.getenv("DB_NAME"),
-        "USER": os.getenv("DB_USER"),
-        "PASSWORD": os.getenv("DB_PASSWORD"),
-        "HOST": os.getenv("DB_HOST", "localhost"),
-        "PORT": os.getenv("DB_PORT", "5432"),
+_DATABASE_URL = os.getenv("DATABASE_URL")
+if _DATABASE_URL:
+    import dj_database_url
+    DATABASES = {"default": dj_database_url.parse(_DATABASE_URL, conn_max_age=600)}
+else:
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.postgresql",
+            "NAME": os.getenv("DB_NAME"),
+            "USER": os.getenv("DB_USER"),
+            "PASSWORD": os.getenv("DB_PASSWORD"),
+            "HOST": os.getenv("DB_HOST", "localhost"),
+            "PORT": os.getenv("DB_PORT", "5432"),
+        }
     }
-}
 
 # ---------------------------------------------------------------------------
 # Cache — Redis

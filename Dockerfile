@@ -51,5 +51,5 @@ COPY --chown=django:django docker/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
 ENTRYPOINT ["/entrypoint.sh"]
-# Pointe sur config.wsgi (et non backend.wsgi)
-CMD ["gunicorn", "config.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "2", "--timeout", "120"]
+# Shell form pour interpoler $PORT (Railway) avec fallback 8000 (local)
+CMD gunicorn config.wsgi:application --bind 0.0.0.0:${PORT:-8000} --workers 2 --timeout 120
