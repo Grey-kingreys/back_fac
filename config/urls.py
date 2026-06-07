@@ -38,6 +38,7 @@ urlpatterns = [
     path("api/", include("apps.finance.urls")),
     path("api/", include("apps.logistique.urls")),
     path("api/", include("apps.rh.urls")),
+    path("api/", include("apps.notifications.urls")),
 
     # --- Prometheus metrics endpoint (/metrics) ---
     path("", include("django_prometheus.urls")),

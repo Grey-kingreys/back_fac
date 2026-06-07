@@ -4,7 +4,19 @@ apps/ventes/serializers.py
 
 from rest_framework import serializers
 
-from .models import Client, Commande, LigneCommande, Paiement, ParametresFidelite
+from .models import (
+    Client,
+    Commande,
+    Devis,
+    HistoriquePoints,
+    LigneCommande,
+    LigneDevis,
+    LigneRetour,
+    Paiement,
+    ParametresFidelite,
+    Promotion,
+    RetourCommande,
+)
 
 
 class ParametresFideliteSerializer(serializers.ModelSerializer):
@@ -179,3 +191,157 @@ class PaiementInputSerializer(serializers.Serializer):
     montant = serializers.DecimalField(max_digits=14, decimal_places=2, min_value=0.01)
     mode = serializers.ChoiceField(choices=Paiement.Mode.choices)
     reference = serializers.CharField(required=False, allow_blank=True)
+
+
+# ── Historique points ─────────────────────────────────────────────────────────
+class HistoriquePointsSerializer(serializers.ModelSerializer):
+    type_label = serializers.CharField(source='get_type_mouvement_display', read_only=True)
+    client_nom = serializers.CharField(source='client.nom_complet', read_only=True)
+
+    class Meta:
+        model = HistoriquePoints
+        fields = ['id', 'client', 'client_nom', 'type_mouvement', 'type_label',
+                  'points', 'commande', 'note', 'created_at']
+        read_only_fields = fields
+
+
+# ── Devis ─────────────────────────────────────────────────────────────────────
+class LigneDevisSerializer(serializers.ModelSerializer):
+    produit_reference = serializers.CharField(source='produit.reference', read_only=True)
+    produit_nom = serializers.CharField(source='produit.nom', read_only=True)
+    montant_ht = serializers.DecimalField(
+        max_digits=14, decimal_places=2, read_only=True)
+
+    class Meta:
+        model = LigneDevis
+        fields = ['id', 'produit', 'produit_reference', 'produit_nom',
+                  'quantite', 'prix_unitaire_ht', 'montant_ht']
+
+
+class LigneDevisCreateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = LigneDevis
+        fields = ['produit', 'quantite', 'prix_unitaire_ht']
+
+
+class DevisListSerializer(serializers.ModelSerializer):
+    statut_label = serializers.CharField(source='get_statut_display', read_only=True)
+    client_nom = serializers.SerializerMethodField()
+    nb_lignes = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Devis
+        fields = ['id', 'numero', 'statut', 'statut_label',
+                  'client', 'client_nom', 'depot',
+                  'date_expiration', 'nb_lignes', 'created_at']
+        read_only_fields = fields
+
+    def get_client_nom(self, obj):
+        return obj.client.nom_complet if obj.client else "Anonyme"
+
+    def get_nb_lignes(self, obj):
+        return obj.lignes.count()
+
+
+class DevisDetailSerializer(serializers.ModelSerializer):
+    statut_label = serializers.CharField(source='get_statut_display', read_only=True)
+    client_nom = serializers.SerializerMethodField()
+    lignes = LigneDevisSerializer(many=True, read_only=True)
+    cree_par_nom = serializers.CharField(source='cree_par.get_full_name', read_only=True)
+
+    class Meta:
+        model = Devis
+        fields = ['id', 'numero', 'statut', 'statut_label',
+                  'client', 'client_nom', 'depot', 'commande',
+                  'date_expiration', 'notes', 'lignes',
+                  'cree_par', 'cree_par_nom', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'numero', 'statut_label', 'client_nom',
+                            'commande', 'cree_par', 'cree_par_nom',
+                            'created_at', 'updated_at']
+
+    def get_client_nom(self, obj):
+        return obj.client.nom_complet if obj.client else "Anonyme"
+
+
+class DevisCreateSerializer(serializers.Serializer):
+    depot = serializers.PrimaryKeyRelatedField(
+        queryset=__import__('apps.companies.models', fromlist=['Depot']).Depot.objects.all()
+    )
+    client = serializers.PrimaryKeyRelatedField(
+        queryset=Client.objects.all(), required=False, allow_null=True,
+    )
+    date_expiration = serializers.DateField(required=False, allow_null=True)
+    notes = serializers.CharField(required=False, allow_blank=True)
+    lignes = LigneDevisCreateSerializer(many=True)
+
+    def validate_lignes(self, value):
+        if not value:
+            raise serializers.ValidationError("Au moins une ligne est requise.")
+        return value
+
+
+# ── Retours commandes ─────────────────────────────────────────────────────────
+class LigneRetourSerializer(serializers.ModelSerializer):
+    produit_reference = serializers.CharField(source='produit.reference', read_only=True)
+    produit_nom = serializers.CharField(source='produit.nom', read_only=True)
+
+    class Meta:
+        model = LigneRetour
+        fields = ['id', 'produit', 'produit_reference', 'produit_nom',
+                  'quantite', 'motif_ligne']
+
+
+class LigneRetourCreateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = LigneRetour
+        fields = ['produit', 'quantite', 'motif_ligne']
+
+
+class RetourCommandeSerializer(serializers.ModelSerializer):
+    motif_label = serializers.CharField(source='get_motif_display', read_only=True)
+    type_retour_label = serializers.CharField(
+        source='get_type_retour_display', read_only=True)
+    lignes = LigneRetourSerializer(many=True, read_only=True)
+    traite_par_nom = serializers.CharField(
+        source='traite_par.get_full_name', read_only=True)
+
+    class Meta:
+        model = RetourCommande
+        fields = ['id', 'commande', 'motif', 'motif_label',
+                  'type_retour', 'type_retour_label',
+                  'montant_rembourse', 'notes', 'lignes',
+                  'traite_par', 'traite_par_nom', 'created_at']
+        read_only_fields = ['id', 'motif_label', 'type_retour_label',
+                            'traite_par', 'traite_par_nom', 'created_at']
+
+
+class RetourCommandeCreateSerializer(serializers.Serializer):
+    commande = serializers.PrimaryKeyRelatedField(
+        queryset=Commande.objects.all()
+    )
+    motif = serializers.ChoiceField(choices=RetourCommande.Motif.choices)
+    type_retour = serializers.ChoiceField(choices=RetourCommande.TypeRetour.choices)
+    montant_rembourse = serializers.DecimalField(
+        max_digits=14, decimal_places=2, default=0, min_value=0)
+    notes = serializers.CharField(required=False, allow_blank=True)
+    lignes = LigneRetourCreateSerializer(many=True)
+
+    def validate_lignes(self, value):
+        if not value:
+            raise serializers.ValidationError("Au moins une ligne est requise.")
+        return value
+
+
+# ── Promotions ────────────────────────────────────────────────────────────────
+class PromotionSerializer(serializers.ModelSerializer):
+    est_active_aujourd_hui = serializers.ReadOnlyField()
+
+    class Meta:
+        model = Promotion
+        fields = [
+            'id', 'nom', 'type_promotion', 'valeur', 'cible',
+            'client', 'categorie', 'produit',
+            'date_debut', 'date_fin', 'is_active',
+            'est_active_aujourd_hui', 'created_by', 'created_at',
+        ]
+        read_only_fields = ['id', 'created_by', 'created_at', 'est_active_aujourd_hui']

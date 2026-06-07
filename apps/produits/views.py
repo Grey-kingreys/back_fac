@@ -3,6 +3,8 @@ apps/produits/views.py
 CRUD : Categorie, Unite, Fournisseur, Produit
 """
 
+from django.db import transaction
+
 from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import status
 from rest_framework.decorators import action
@@ -15,11 +17,25 @@ from rest_framework.viewsets import GenericViewSet
 from apps.accounts.models import Role
 from apps.accounts.permissions import CompanyFilterMixin, HasRole, IsCompanyMember
 
-from .models import Categorie, Fournisseur, Produit, Unite
+from .models import (
+    Categorie,
+    CommandeFournisseur,
+    EvaluationFournisseur,
+    Fournisseur,
+    MouvementDetteFournisseur,
+    Produit,
+    Unite,
+)
 from .serializers import (
     CategorieSerializer,
+    CommandeFournisseurCreateSerializer,
+    CommandeFournisseurDetailSerializer,
+    CommandeFournisseurListSerializer,
+    EvaluationFournisseurSerializer,
     FournisseurDetailSerializer,
     FournisseurListSerializer,
+    LigneCommandeFournisseurSerializer,
+    MouvementDetteFournisseurSerializer,
     ProduitDetailSerializer,
     ProduitListSerializer,
     UniteSerializer,
@@ -186,6 +202,13 @@ class FournisseurViewSet(CompanyWriteMixin, CompanyFilterMixin,
         obj.save(update_fields=['is_active'])
         return Response({'detail': f"Fournisseur '{obj.nom}' désactivé."})
 
+    @extend_schema(summary="Évaluations d'un fournisseur")
+    @action(detail=True, methods=['get'], url_path='evaluations')
+    def evaluations(self, request, pk=None):
+        fournisseur = self.get_object()
+        qs = EvaluationFournisseur.objects.filter(fournisseur=fournisseur).order_by('-created_at')
+        return Response(EvaluationFournisseurSerializer(qs, many=True).data)
+
 
 # ── Produits ──────────────────────────────────────────────────────────────────
 
@@ -265,3 +288,182 @@ class ProduitViewSet(CompanyWriteMixin, CompanyFilterMixin,
                 for s in stocks
             ],
         })
+
+
+# ── Commandes fournisseurs ────────────────────────────────────────────────────
+@extend_schema(tags=["Fournisseurs — Commandes"])
+class CommandeFournisseurViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
+
+    ROLES = [Role.ADMIN, Role.SUPERVISEUR, Role.GESTIONNAIRE_STOCK, Role.SUPERADMIN]
+    WRITE_ROLES = [Role.ADMIN, Role.GESTIONNAIRE_STOCK, Role.SUPERADMIN]
+
+    def get_permissions(self):
+        if self.action in ('list', 'retrieve'):
+            return [IsAuthenticated(), HasRole(self.ROLES)]
+        return [IsAuthenticated(), HasRole(self.WRITE_ROLES)]
+
+    def get_serializer_class(self):
+        if self.action == 'list':
+            return CommandeFournisseurListSerializer
+        return CommandeFournisseurDetailSerializer
+
+    def get_queryset(self):
+        qs = CommandeFournisseur.objects.select_related(
+            'fournisseur', 'depot_destination', 'created_par'
+        ).prefetch_related('lignes__produit').order_by('-created_at')
+        user = self.request.user
+        if not user.is_superadmin:
+            if not user.company:
+                return qs.none()
+            qs = qs.filter(company=user.company)
+        statut = self.request.query_params.get('statut')
+        fournisseur = self.request.query_params.get('fournisseur')
+        if statut:
+            qs = qs.filter(statut=statut)
+        if fournisseur:
+            qs = qs.filter(fournisseur_id=fournisseur)
+        return qs
+
+    def create(self, request, *args, **kwargs):
+        s = CommandeFournisseurCreateSerializer(
+            data=request.data, context={'request': request}
+        )
+        s.is_valid(raise_exception=True)
+        commande = s.save()
+        return Response(CommandeFournisseurDetailSerializer(commande).data,
+                        status=status.HTTP_201_CREATED)
+
+    @extend_schema(summary="Réceptionner une commande fournisseur → entrée stock")
+    @action(detail=True, methods=['post'], url_path='recevoir')
+    def recevoir(self, request, pk=None):
+        from apps.stocks.services import entree_stock
+        commande = self.get_object()
+        if commande.statut == CommandeFournisseur.Statut.ANNULEE:
+            from rest_framework.exceptions import ValidationError
+            raise ValidationError("Impossible de réceptionner une commande annulée.")
+
+        lignes_data = request.data.get('lignes', [])
+        with transaction.atomic():
+            total_commandees = 0
+            total_recues = 0
+            for item in lignes_data:
+                ligne_id = item.get('ligne_id')
+                qte_recue = item.get('quantite_recue', 0)
+                try:
+                    ligne = commande.lignes.get(pk=ligne_id)
+                except Exception:
+                    continue
+                if qte_recue > 0:
+                    entree_stock(
+                        depot=commande.depot_destination,
+                        produit=ligne.produit,
+                        quantite=qte_recue,
+                        utilisateur=request.user,
+                        reference_doc=commande.numero,
+                        motif=f"Réception commande fournisseur {commande.numero}",
+                    )
+                    ligne.quantite_recue += qte_recue
+                    ligne.save(update_fields=['quantite_recue'])
+                    # Mettre à jour la dette fournisseur
+                    montant = ligne.prix_unitaire * qte_recue
+                    MouvementDetteFournisseur.objects.create(
+                        fournisseur=commande.fournisseur,
+                        type_mouvement=MouvementDetteFournisseur.TypeMouvement.DETTE_AJOUTEE,
+                        montant=montant,
+                        reference=commande.numero,
+                        created_par=request.user,
+                    )
+                    commande.fournisseur.solde_dette += montant
+                    commande.fournisseur.save(update_fields=['solde_dette'])
+                total_commandees += float(ligne.quantite_commandee)
+                total_recues += float(ligne.quantite_recue)
+
+            # Mettre à jour le statut
+            if total_recues >= total_commandees:
+                commande.statut = CommandeFournisseur.Statut.RECUE
+            elif total_recues > 0:
+                commande.statut = CommandeFournisseur.Statut.PARTIELLEMENT_RECUE
+            commande.save(update_fields=['statut'])
+
+        return Response(CommandeFournisseurDetailSerializer(commande).data)
+
+
+# ── Mouvements dette fournisseur ──────────────────────────────────────────────
+@extend_schema(tags=["Fournisseurs — Dettes"])
+class MouvementDetteFournisseurViewSet(GenericViewSet, ListModelMixin):
+
+    serializer_class = MouvementDetteFournisseurSerializer
+
+    def get_permissions(self):
+        return [IsAuthenticated(), HasRole([Role.ADMIN, Role.SUPERVISEUR, Role.SUPERADMIN])]
+
+    def get_queryset(self):
+        qs = MouvementDetteFournisseur.objects.select_related(
+            'fournisseur', 'created_par'
+        ).order_by('-created_at')
+        user = self.request.user
+        if not user.is_superadmin:
+            if not user.company:
+                return qs.none()
+            qs = qs.filter(fournisseur__company=user.company)
+        fournisseur = self.request.query_params.get('fournisseur')
+        if fournisseur:
+            qs = qs.filter(fournisseur_id=fournisseur)
+        return qs
+
+    def create(self, request, *args, **kwargs):
+        s = MouvementDetteFournisseurSerializer(
+            data=request.data, context={'request': request}
+        )
+        s.is_valid(raise_exception=True)
+        with transaction.atomic():
+            mouvement = MouvementDetteFournisseur.objects.create(
+                created_par=request.user, **s.validated_data)
+            fournisseur = mouvement.fournisseur
+            if mouvement.type_mouvement == MouvementDetteFournisseur.TypeMouvement.PAIEMENT_EFFECTUE:
+                fournisseur.solde_dette -= mouvement.montant
+            elif mouvement.type_mouvement == MouvementDetteFournisseur.TypeMouvement.DETTE_AJOUTEE:
+                fournisseur.solde_dette += mouvement.montant
+            fournisseur.save(update_fields=['solde_dette'])
+        return Response(MouvementDetteFournisseurSerializer(mouvement).data,
+                        status=status.HTTP_201_CREATED)
+
+
+# ── Évaluations fournisseurs ──────────────────────────────────────────────────
+@extend_schema(tags=["Produits — Évaluations fournisseurs"])
+class EvaluationFournisseurViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
+    """CRUD évaluations fournisseurs."""
+    serializer_class = EvaluationFournisseurSerializer
+
+    def get_permissions(self):
+        if self.action in ('list', 'retrieve'):
+            return [IsAuthenticated(), HasRole([Role.ADMIN, Role.SUPERVISEUR, Role.SUPERADMIN])]
+        return [IsAuthenticated(), HasRole([Role.ADMIN, Role.SUPERADMIN])]
+
+    def get_queryset(self):
+        qs = EvaluationFournisseur.objects.select_related(
+            'fournisseur', 'commande', 'evalue_par'
+        ).order_by('-created_at')
+        user = self.request.user
+        if not user.is_superadmin:
+            company = user.company
+            if not company:
+                return qs.none()
+            qs = qs.filter(fournisseur__company=company)
+        fournisseur_id = self.request.query_params.get('fournisseur')
+        if fournisseur_id:
+            qs = qs.filter(fournisseur_id=fournisseur_id)
+        return qs
+
+    def create(self, request, *args, **kwargs):
+        s = EvaluationFournisseurSerializer(data=request.data, context={'request': request})
+        s.is_valid(raise_exception=True)
+        s.save(evalue_par=request.user)
+        return Response(s.data, status=status.HTTP_201_CREATED)
+
+    def partial_update(self, request, *args, **kwargs):
+        obj = self.get_object()
+        s = EvaluationFournisseurSerializer(obj, data=request.data, partial=True)
+        s.is_valid(raise_exception=True)
+        s.save()
+        return Response(s.data)

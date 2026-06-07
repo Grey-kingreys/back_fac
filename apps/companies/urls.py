@@ -12,6 +12,14 @@ from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
 from .views import DepotViewSet, ZoneViewSet
+from .views_analytics import (
+    AnalyticsFinanceView,
+    AnalyticsPerformanceView,
+    AnalyticsStockView,
+    AnalyticsTvaView,
+    AnalyticsVentesView,
+    SuperAdminDashboardView,
+)
 from .views_company import CompanyDetailView, CompanyListCreateView, CompanyToggleView
 
 
@@ -28,4 +36,14 @@ urlpatterns = [
 
     # ── Zones et Dépôts (filtrés par company) ────────────────────────────
     path('', include(router.urls)),
+
+    # ── Analytics ────────────────────────────────────────────────────────
+    path('analytics/ventes/', AnalyticsVentesView.as_view(), name='analytics-ventes'),
+    path('analytics/stock/', AnalyticsStockView.as_view(), name='analytics-stock'),
+    path('analytics/finance/', AnalyticsFinanceView.as_view(), name='analytics-finance'),
+    path('analytics/tva/', AnalyticsTvaView.as_view(), name='analytics-tva'),
+    path('analytics/performance/', AnalyticsPerformanceView.as_view(),
+         name='analytics-performance'),
+    path('superadmin/dashboard/', SuperAdminDashboardView.as_view(),
+         name='superadmin-dashboard'),
 ]

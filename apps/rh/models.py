@@ -170,6 +170,21 @@ class Document(models.Model):
         Employe, on_delete=models.SET_NULL, null=True, blank=True,
         related_name='documents',
     )
+    commande = models.ForeignKey(
+        'ventes.Commande', on_delete=models.SET_NULL,
+        null=True, blank=True, related_name='documents',
+        verbose_name=_("Commande liée"),
+    )
+    mission = models.ForeignKey(
+        'logistique.Mission', on_delete=models.SET_NULL,
+        null=True, blank=True, related_name='documents',
+        verbose_name=_("Mission liée"),
+    )
+    transfert = models.ForeignKey(
+        'stocks.TransfertStock', on_delete=models.SET_NULL,
+        null=True, blank=True, related_name='documents',
+        verbose_name=_("Transfert lié"),
+    )
     reference_externe = models.CharField(
         _("Référence externe"), max_length=100, blank=True,
     )
@@ -232,3 +247,39 @@ class ObjectifVente(models.Model):
         if not self.montant_objectif:
             return 0
         return round(float(self.montant_realise) / float(self.montant_objectif) * 100, 1)
+
+
+# ── Historique affectations ───────────────────────────────────────────────────
+class HistoriqueAffectation(models.Model):
+    """Trace les mutations d'un employé entre dépôts."""
+    employe = models.ForeignKey(
+        Employe, on_delete=models.CASCADE,
+        related_name='historique_affectations', verbose_name=_("Employé"),
+    )
+    depot_ancien = models.ForeignKey(
+        'companies.Depot', on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='affectations_depart', verbose_name=_("Ancien dépôt"),
+    )
+    depot_nouveau = models.ForeignKey(
+        'companies.Depot', on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='affectations_arrivee', verbose_name=_("Nouveau dépôt"),
+    )
+    motif = models.TextField(_("Motif"), blank=True)
+    effectue_par = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='affectations_effectuees', verbose_name=_("Effectué par"),
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = _("Historique affectation")
+        verbose_name_plural = _("Historiques affectations")
+        ordering = ['-created_at']
+
+    def __str__(self):
+        ancien = self.depot_ancien.code if self.depot_ancien else "—"
+        nouveau = self.depot_nouveau.code if self.depot_nouveau else "—"
+        return f"{self.employe} : {ancien} → {nouveau}"

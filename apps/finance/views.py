@@ -3,8 +3,9 @@ apps/finance/views.py
 Taux de change, Caisses, Sessions, Transactions, Mobile Money
 """
 
-from django.db import transaction
+from django.db import models, transaction
 
+from drf_spectacular.openapi import OpenApiTypes
 from drf_spectacular.utils import extend_schema
 from rest_framework import status
 from rest_framework.decorators import action
@@ -12,22 +13,30 @@ from rest_framework.exceptions import ValidationError
 from rest_framework.mixins import ListModelMixin, RetrieveModelMixin
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.views import APIView
 from rest_framework.viewsets import GenericViewSet
 
 from apps.accounts.models import Role
 from apps.accounts.permissions import CompanyFilterMixin, HasRole
 
 from .models import (
+    CaisseEntreprise,
     CaissePhysique,
+    CaisseZone,
     CompteMobileMoney,
+    DepenseOperationnelle,
     SessionCaisse,
     TauxChange,
     TransactionCaisse,
     TransactionMobileMoney,
+    VersementCaisse,
 )
 from .serializers import (
+    CaisseEntrepriseSerializer,
     CaissePhysiqueSerializer,
+    CaisseZoneSerializer,
     CompteMobileMoneySerializer,
+    DepenseOperationnelleSerializer,
     FermerSessionSerializer,
     OuvrirSessionSerializer,
     SessionCaisseDetailSerializer,
@@ -36,6 +45,7 @@ from .serializers import (
     TransactionCaisseInputSerializer,
     TransactionMobileMoneyInputSerializer,
     TransactionMobileMoneySerializer,
+    VersementCaisseSerializer,
 )
 
 
@@ -282,3 +292,219 @@ class CompteMobileMoneyViewSet(CompanyFilterMixin, GenericViewSet,
             TransactionMobileMoneySerializer(tx).data,
             status=status.HTTP_201_CREATED,
         )
+
+
+# ── Caisse Zone ───────────────────────────────────────────────────────────────
+@extend_schema(tags=["Finance — Caisses Zone"])
+class CaisseZoneViewSet(CompanyFilterMixin, GenericViewSet,
+                        ListModelMixin, RetrieveModelMixin):
+
+    queryset = CaisseZone.objects.select_related('zone').order_by('nom')
+    serializer_class = CaisseZoneSerializer
+
+    def get_permissions(self):
+        if self.action in ('list', 'retrieve'):
+            return [IsAuthenticated(), HasRole(FINANCE_READ)]
+        return [IsAuthenticated(), HasRole(FINANCE_WRITE)]
+
+    def create(self, request, *args, **kwargs):
+        s = CaisseZoneSerializer(data=request.data, context={'request': request})
+        s.is_valid(raise_exception=True)
+        s.save()
+        return Response(s.data, status=status.HTTP_201_CREATED)
+
+
+# ── Caisse Entreprise ─────────────────────────────────────────────────────────
+@extend_schema(tags=["Finance — Caisse Entreprise"])
+class CaisseEntrepriseViewSet(GenericViewSet, RetrieveModelMixin):
+    """Une seule caisse par entreprise — lecture seule via /caisse-entreprise/me/."""
+
+    serializer_class = CaisseEntrepriseSerializer
+
+    def get_permissions(self):
+        return [IsAuthenticated(), HasRole(FINANCE_READ)]
+
+    def get_queryset(self):
+        user = self.request.user
+        if user.is_superadmin:
+            return CaisseEntreprise.objects.all()
+        return CaisseEntreprise.objects.filter(company=user.company)
+
+    @extend_schema(summary="Caisse entreprise de la company connectée")
+    @action(detail=False, methods=['get'], url_path='me')
+    def me(self, request):
+        try:
+            obj = CaisseEntreprise.objects.get(company=request.user.company)
+        except CaisseEntreprise.DoesNotExist:
+            return Response({'detail': "Aucune caisse entreprise configurée."}, status=404)
+        return Response(CaisseEntrepriseSerializer(obj).data)
+
+
+# ── Versements inter-niveaux ──────────────────────────────────────────────────
+@extend_schema(tags=["Finance — Versements"])
+class VersementCaisseViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
+
+    serializer_class = VersementCaisseSerializer
+
+    def get_permissions(self):
+        if self.action in ('list', 'retrieve'):
+            return [IsAuthenticated(), HasRole(FINANCE_READ)]
+        return [IsAuthenticated(), HasRole(FINANCE_WRITE)]
+
+    def get_queryset(self):
+        qs = VersementCaisse.objects.select_related(
+            'effectue_par', 'recu_par',
+            'caisse_source_depot', 'caisse_source_zone',
+            'caisse_dest_zone', 'caisse_dest_entreprise',
+        ).order_by('-created_at')
+        user = self.request.user
+        if not user.is_superadmin:
+            company = user.company
+            if not company:
+                return qs.none()
+            qs = qs.filter(
+                models.Q(caisse_source_depot__company=company) |
+                models.Q(caisse_source_zone__company=company)
+            )
+        return qs
+
+    def create(self, request, *args, **kwargs):
+        s = VersementCaisseSerializer(data=request.data, context={'request': request})
+        s.is_valid(raise_exception=True)
+        d = s.validated_data
+
+        with transaction.atomic():
+            versement = VersementCaisse.objects.create(
+                effectue_par=request.user, **d)
+            # Mettre à jour les soldes des caisses
+            montant = d['montant']
+            if d['type_versement'] == VersementCaisse.TypeVersement.DEPOT_VERS_ZONE:
+                if d.get('caisse_source_depot'):
+                    src = d['caisse_source_depot']
+                    src.solde_actuel -= montant
+                    src.save(update_fields=['solde_actuel'])
+                if d.get('caisse_dest_zone'):
+                    dst = d['caisse_dest_zone']
+                    dst.solde_actuel += montant
+                    dst.save(update_fields=['solde_actuel'])
+            elif d['type_versement'] == VersementCaisse.TypeVersement.ZONE_VERS_ENTREPRISE:
+                if d.get('caisse_source_zone'):
+                    src = d['caisse_source_zone']
+                    src.solde_actuel -= montant
+                    src.save(update_fields=['solde_actuel'])
+                if d.get('caisse_dest_entreprise'):
+                    dst = d['caisse_dest_entreprise']
+                    dst.solde_actuel += montant
+                    dst.save(update_fields=['solde_actuel'])
+
+        return Response(VersementCaisseSerializer(versement).data,
+                        status=status.HTTP_201_CREATED)
+
+
+# ── Dépenses opérationnelles ──────────────────────────────────────────────────
+@extend_schema(tags=["Finance — Dépenses"])
+class DepenseOperationnelleViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
+    serializer_class = DepenseOperationnelleSerializer
+
+    def get_permissions(self):
+        if self.action in ('list', 'retrieve'):
+            return [IsAuthenticated(), HasRole(FINANCE_READ)]
+        return [IsAuthenticated(), HasRole(FINANCE_WRITE)]
+
+    def get_queryset(self):
+        qs = DepenseOperationnelle.objects.select_related(
+            'company', 'depot', 'enregistre_par'
+        ).order_by('-date_depense')
+        user = self.request.user
+        if not user.is_superadmin:
+            company = user.company
+            if not company:
+                return qs.none()
+            qs = qs.filter(company=company)
+        categorie = self.request.query_params.get('categorie')
+        depot = self.request.query_params.get('depot')
+        date_debut = self.request.query_params.get('date_debut')
+        date_fin = self.request.query_params.get('date_fin')
+        if categorie:
+            qs = qs.filter(categorie=categorie)
+        if depot:
+            qs = qs.filter(depot_id=depot)
+        if date_debut:
+            qs = qs.filter(date_depense__gte=date_debut)
+        if date_fin:
+            qs = qs.filter(date_depense__lte=date_fin)
+        return qs
+
+    def create(self, request, *args, **kwargs):
+        s = DepenseOperationnelleSerializer(data=request.data, context={'request': request})
+        s.is_valid(raise_exception=True)
+        company = request.user.company
+        s.save(company=company, enregistre_par=request.user)
+        return Response(s.data, status=status.HTTP_201_CREATED)
+
+    def partial_update(self, request, *args, **kwargs):
+        obj = self.get_object()
+        s = DepenseOperationnelleSerializer(obj, data=request.data, partial=True)
+        s.is_valid(raise_exception=True)
+        s.save()
+        return Response(s.data)
+
+    def destroy(self, request, *args, **kwargs):
+        obj = self.get_object()
+        obj.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+# ── Vue consolidée tous niveaux ───────────────────────────────────────────────
+
+@extend_schema(tags=["Finance — Consolidation"])
+class ConsolidationCaissesView(APIView):
+    """Vue consolidée des soldes de tous les niveaux de caisses."""
+    permission_classes = [IsAuthenticated]
+
+    def get_permissions(self):
+        return [IsAuthenticated(), HasRole(FINANCE_READ)]
+
+    @extend_schema(summary="Soldes consolidés — tous niveaux de caisses", responses={200: OpenApiTypes.OBJECT})
+    def get(self, request):
+        company = request.user.company
+        if not company and not request.user.is_superadmin:
+            return Response({'detail': "Pas d'entreprise associée."}, status=400)
+
+        from django.db.models import Sum
+
+        if request.user.is_superadmin:
+            caisses_depot = CaissePhysique.objects.all()
+            caisses_zone = CaisseZone.objects.all()
+            caisse_ent = CaisseEntreprise.objects.all()
+        else:
+            caisses_depot = CaissePhysique.objects.filter(company=company)
+            caisses_zone = CaisseZone.objects.filter(company=company)
+            caisse_ent = CaisseEntreprise.objects.filter(company=company)
+
+        return Response({
+            'caisse_entreprise': [
+                {'id': c.pk, 'nom': c.nom, 'solde': str(c.solde_actuel), 'devise': c.devise}
+                for c in caisse_ent
+            ],
+            'caisses_zone': [
+                {
+                    'id': c.pk, 'nom': c.nom, 'zone': c.zone.name,
+                    'solde': str(c.solde_actuel), 'devise': c.devise,
+                }
+                for c in caisses_zone
+            ],
+            'caisses_depot': [
+                {
+                    'id': c.pk, 'nom': c.nom, 'depot': c.depot.name,
+                    'solde': str(c.solde_actuel), 'devise': c.devise,
+                    'session_ouverte': c.sessions.filter(statut='ouverte').exists(),
+                }
+                for c in caisses_depot
+            ],
+            'total_gnf': str(
+                (caisses_depot.aggregate(t=Sum('solde_actuel'))['t'] or 0) +
+                (caisses_zone.aggregate(t=Sum('solde_actuel'))['t'] or 0) +
+                (caisse_ent.aggregate(t=Sum('solde_actuel'))['t'] or 0)
+            ),
+        })

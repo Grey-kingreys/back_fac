@@ -163,6 +163,10 @@ class Command(BaseCommand):
         zones = self._seed_zones(company)
         depots = self._seed_depots(zones)
         self._seed_users(company, depots)
+        self._seed_caisses(company, zones, depots)
+        self._seed_fidelite(company)
+        self._seed_clients(company)
+        self._seed_produits(company)
 
         self.stdout.write(self.style.SUCCESS("✓ Seed terminé.\n"))
 
@@ -262,3 +266,161 @@ class Command(BaseCommand):
                 )
             except Exception as e:
                 self.stdout.write(self.style.ERROR(f"  ✗ Erreur {email} : {e}"))
+
+    # ── Caisses (hiérarchie finance) ──────────────────────────────────────────
+
+    def _seed_caisses(self, company, zones, depots):
+        try:
+            from apps.finance.models import CaisseEntreprise, CaissePhysique, CaisseZone
+
+            caisse_ent, created = CaisseEntreprise.objects.get_or_create(
+                company=company,
+                defaults={"nom": "Caisse Centrale DjoulaGest", "devise": "GNF", "solde_actuel": 0},
+            )
+            if created:
+                self.stdout.write(self.style.SUCCESS(f"  ✓ CaisseEntreprise créée  : {caisse_ent.nom}"))
+            else:
+                self.stdout.write(f"  · CaisseEntreprise existante : {caisse_ent.nom}")
+
+            for zone in zones.values():
+                caisse_zone, created = CaisseZone.objects.get_or_create(
+                    zone=zone,
+                    defaults={
+                        "company": company,
+                        "nom": f"Caisse Zone {zone.name}",
+                        "devise": "GNF",
+                        "solde_actuel": 0,
+                    },
+                )
+                if created:
+                    self.stdout.write(self.style.SUCCESS(f"  ✓ CaisseZone créée        : {caisse_zone.nom}"))
+                else:
+                    self.stdout.write(f"  · CaisseZone existante     : {caisse_zone.nom}")
+
+            for depot in depots.values():
+                caisse_phys, created = CaissePhysique.objects.get_or_create(
+                    depot=depot,
+                    defaults={
+                        "company": company,
+                        "nom": f"Caisse {depot.code}",
+                        "devise": "GNF",
+                        "solde_actuel": 0,
+                    },
+                )
+                if created:
+                    self.stdout.write(self.style.SUCCESS(f"  ✓ CaissePhysique créée    : {caisse_phys.nom}"))
+                else:
+                    self.stdout.write(f"  · CaissePhysique existante : {caisse_phys.nom}")
+
+        except Exception as e:
+            self.stdout.write(self.style.WARNING(f"  ⚠ Caisses ignorées (migration manquante ?) : {e}"))
+
+    # ── Paramètres de fidélité ─────────────────────────────────────────────────
+
+    def _seed_fidelite(self, company):
+        try:
+            from apps.ventes.models import ParametresFidelite
+
+            params, created = ParametresFidelite.objects.get_or_create(
+                company=company,
+                defaults={
+                    "is_active": True,
+                    "tranche_montant": 10000,
+                    "points_par_tranche": 1,
+                    "valeur_point_gnf": 100,
+                },
+            )
+            if created:
+                self.stdout.write(self.style.SUCCESS(f"  ✓ ParametresFidelite créés : company={company.name}"))
+            else:
+                self.stdout.write(f"  · ParametresFidelite existants : company={company.name}")
+
+        except Exception as e:
+            self.stdout.write(self.style.WARNING(f"  ⚠ ParametresFidelite ignorés (migration manquante ?) : {e}"))
+
+    # ── Clients démo ──────────────────────────────────────────────────────────
+
+    def _seed_clients(self, company):
+        try:
+            from apps.ventes.models import Client
+
+            clients_demo = [
+                {"code": "CLT-001", "nom": "Mamadou", "prenom": "Diallo", "telephone": "620000001"},
+                {"code": "CLT-002", "nom": "Fatoumata", "prenom": "Camara", "telephone": "620000002"},
+                {"code": "CLT-003", "nom": "Ibrahim", "prenom": "Bah", "telephone": "620000003"},
+            ]
+            for c in clients_demo:
+                client, created = Client.objects.get_or_create(
+                    company=company,
+                    code=c["code"],
+                    defaults=c,
+                )
+                if created:
+                    self.stdout.write(self.style.SUCCESS(f"  ✓ Client créé             : {c['prenom']} {c['nom']} ({c['code']})"))
+                else:
+                    self.stdout.write(f"  · Client existant          : {c['prenom']} {c['nom']} ({c['code']})")
+
+        except Exception as e:
+            self.stdout.write(self.style.WARNING(f"  ⚠ Clients ignorés (migration manquante ?) : {e}"))
+
+    # ── Produits et catégories démo ────────────────────────────────────────────
+
+    def _seed_produits(self, company):
+        try:
+            from apps.produits.models import Categorie, Produit, Unite
+
+            cat, created = Categorie.objects.get_or_create(
+                company=company,
+                name="Alimentation",
+                defaults={"couleur": "#10b981", "tva_taux": 0},
+            )
+            if created:
+                self.stdout.write(self.style.SUCCESS(f"  ✓ Catégorie créée         : {cat.name}"))
+            else:
+                self.stdout.write(f"  · Catégorie existante      : {cat.name}")
+
+            unite, created = Unite.objects.get_or_create(
+                company=company,
+                symbole="kg",
+                defaults={"name": "Kilogramme"},
+            )
+            if created:
+                self.stdout.write(self.style.SUCCESS(f"  ✓ Unité créée             : {unite.name} ({unite.symbole})"))
+            else:
+                self.stdout.write(f"  · Unité existante          : {unite.name} ({unite.symbole})")
+
+            produits_demo = [
+                {
+                    "reference": "PROD-001",
+                    "nom": "Riz local 25kg",
+                    "categorie": cat,
+                    "unite": unite,
+                    "prix_achat": 150000,
+                    "prix_vente": 180000,
+                    "seuil_alerte": 10,
+                    "tva_taux": 0,
+                },
+                {
+                    "reference": "PROD-002",
+                    "nom": "Huile de palme 5L",
+                    "categorie": cat,
+                    "unite": unite,
+                    "prix_achat": 45000,
+                    "prix_vente": 55000,
+                    "seuil_alerte": 20,
+                    "tva_taux": 0,
+                },
+            ]
+            for p in produits_demo:
+                produit, created = Produit.objects.get_or_create(
+                    company=company,
+                    reference=p["reference"],
+                    defaults=p,
+                )
+                if created:
+                    self.stdout.write(self.style.SUCCESS(f"  ✓ Produit créé            : {produit.nom} ({produit.reference})"))
+                else:
+                    self.stdout.write(f"  · Produit existant         : {produit.nom} ({produit.reference})")
+
+        except Exception as e:
+            self.stdout.write(self.style.WARNING(f"  ⚠ Produits ignorés (migration manquante ?) : {e}"))

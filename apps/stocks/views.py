@@ -3,6 +3,9 @@ apps/stocks/views.py
 Stocks, Mouvements, Transferts
 """
 
+from django.db import transaction
+from django.utils import timezone
+
 from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import status
 from rest_framework.decorators import action
@@ -15,15 +18,20 @@ from rest_framework.viewsets import GenericViewSet
 from apps.accounts.models import Role
 from apps.accounts.permissions import CompanyFilterMixin, HasRole, IsCompanyMember
 
-from .models import MouvementStock, StockDepot, TransfertStock
+from .models import AjustementStock, Inventaire, LigneInventaire, MouvementStock, StockDepot, TransfertStock
 from .serializers import (
+    AjustementStockSerializer,
     EntreeStockSerializer,
+    InventaireCreateSerializer,
+    InventaireDetailSerializer,
+    InventaireListSerializer,
     MouvementStockSerializer,
     SortieStockSerializer,
     StockDepotSerializer,
     TransfertCreateSerializer,
     TransfertDetailSerializer,
     TransfertListSerializer,
+    ValiderInventaireSerializer,
 )
 from .services import (
     creer_transfert,
@@ -312,3 +320,206 @@ class TransfertStockViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
         obj.statut = TransfertStock.Statut.ANNULE
         obj.save(update_fields=['statut'])
         return Response(TransfertDetailSerializer(obj).data)
+
+
+# ── Inventaires ───────────────────────────────────────────────────────────────
+@extend_schema(tags=["Stocks — Inventaires"])
+class InventaireViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
+
+    ROLES = [Role.ADMIN, Role.SUPERVISEUR, Role.GESTIONNAIRE_STOCK, Role.SUPERADMIN]
+    WRITE_ROLES = [Role.ADMIN, Role.SUPERVISEUR, Role.SUPERADMIN]
+
+    def get_permissions(self):
+        return [IsAuthenticated(), HasRole(self.ROLES)]
+
+    def get_serializer_class(self):
+        return InventaireListSerializer if self.action == 'list' else InventaireDetailSerializer
+
+    def get_queryset(self):
+        qs = Inventaire.objects.select_related(
+            'depot__zone__company', 'cree_par'
+        ).prefetch_related('lignes__produit').order_by('-created_at')
+        user = self.request.user
+        if not user.is_superadmin:
+            if not user.company:
+                return qs.none()
+            qs = qs.filter(company=user.company)
+        depot = self.request.query_params.get('depot')
+        statut = self.request.query_params.get('statut')
+        if depot:
+            qs = qs.filter(depot_id=depot)
+        if statut:
+            qs = qs.filter(statut=statut)
+        return qs
+
+    def create(self, request, *args, **kwargs):
+        if not HasRole(self.WRITE_ROLES).has_permission(request, self):
+            raise PermissionDenied("Droits insuffisants pour créer un inventaire.")
+        s = InventaireCreateSerializer(data=request.data)
+        s.is_valid(raise_exception=True)
+        d = s.validated_data
+        depot = d['depot']
+        company = request.user.company
+        if not request.user.is_superadmin and depot.zone.company != company:
+            raise PermissionDenied("Ce dépôt n'appartient pas à votre entreprise.")
+
+        with transaction.atomic():
+            inventaire = Inventaire.objects.create(
+                company=company,
+                depot=depot,
+                notes=d.get('notes', ''),
+                cree_par=request.user,
+            )
+            # Créer les lignes depuis les stocks actuels
+            stocks = StockDepot.objects.filter(depot=depot).select_related('produit')
+            for stock in stocks:
+                LigneInventaire.objects.create(
+                    inventaire=inventaire,
+                    produit=stock.produit,
+                    quantite_theorique=stock.quantite,
+                )
+        return Response(InventaireDetailSerializer(inventaire).data,
+                        status=status.HTTP_201_CREATED)
+
+    @extend_schema(summary="Valider un inventaire — crée les mouvements de correction")
+    @action(detail=True, methods=['post'], url_path='valider')
+    def valider(self, request, pk=None):
+        if not HasRole(self.WRITE_ROLES).has_permission(request, self):
+            raise PermissionDenied("Droits insuffisants pour valider un inventaire.")
+        inventaire = self.get_object()
+        if inventaire.statut != Inventaire.Statut.EN_COURS:
+            raise ValidationError("Seul un inventaire en cours peut être validé.")
+
+        s = ValiderInventaireSerializer(data=request.data)
+        s.is_valid(raise_exception=True)
+        lignes_data = s.validated_data['lignes']
+
+        with transaction.atomic():
+            for item in lignes_data:
+                ligne_id = item.get('ligne_id')
+                qte_comptee = item.get('quantite_comptee')
+                try:
+                    ligne = inventaire.lignes.get(pk=ligne_id)
+                except LigneInventaire.DoesNotExist:
+                    continue
+                if qte_comptee is None:
+                    continue
+                ligne.quantite_comptee = qte_comptee
+                ligne.save(update_fields=['quantite_comptee'])
+
+                ecart = qte_comptee - ligne.quantite_theorique
+                if ecart != 0:
+                    stock, _ = StockDepot.objects.get_or_create(
+                        depot=inventaire.depot, produit=ligne.produit,
+                        defaults={'quantite': 0},
+                    )
+                    avant = stock.quantite
+                    stock.quantite += ecart
+                    stock.save(update_fields=['quantite'])
+                    MouvementStock.objects.create(
+                        depot=inventaire.depot,
+                        produit=ligne.produit,
+                        type_mouvement=MouvementStock.TypeMouvement.INVENTAIRE,
+                        quantite=abs(ecart),
+                        quantite_avant=avant,
+                        quantite_apres=stock.quantite,
+                        reference_doc=inventaire.numero,
+                        motif=f"Correction inventaire {inventaire.numero}",
+                        utilisateur=request.user,
+                    )
+
+            inventaire.statut = Inventaire.Statut.VALIDE
+            inventaire.valide_par = request.user
+            inventaire.valide_le = timezone.now()
+            inventaire.save(update_fields=['statut', 'valide_par', 'valide_le'])
+
+        return Response(InventaireDetailSerializer(inventaire).data)
+
+
+# ── Ajustements de stock ─���──────────────────────────────────────────────────��─
+@extend_schema(tags=["Stocks — Ajustements"])
+class AjustementStockViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
+
+    serializer_class = AjustementStockSerializer
+
+    def get_permissions(self):
+        return [IsAuthenticated(), HasRole([
+            Role.ADMIN, Role.SUPERVISEUR, Role.GESTIONNAIRE_STOCK, Role.SUPERADMIN
+        ])]
+
+    def get_queryset(self):
+        qs = AjustementStock.objects.select_related(
+            'depot__zone__company', 'produit', 'demande_par'
+        ).order_by('-created_at')
+        user = self.request.user
+        if not user.is_superadmin:
+            if not user.company:
+                return qs.none()
+            qs = qs.filter(company=user.company)
+        statut = self.request.query_params.get('statut')
+        depot = self.request.query_params.get('depot')
+        if statut:
+            qs = qs.filter(statut=statut)
+        if depot:
+            qs = qs.filter(depot_id=depot)
+        return qs
+
+    def create(self, request, *args, **kwargs):
+        s = AjustementStockSerializer(data=request.data)
+        s.is_valid(raise_exception=True)
+        d = s.validated_data
+        company = request.user.company
+        if not request.user.is_superadmin and d['depot'].zone.company != company:
+            raise PermissionDenied("Ce dépôt n'appartient pas à votre entreprise.")
+        ajustement = AjustementStock.objects.create(
+            company=company, demande_par=request.user, **d)
+        return Response(AjustementStockSerializer(ajustement).data,
+                        status=status.HTTP_201_CREATED)
+
+    @extend_schema(summary="Approuver un ajustement de stock")
+    @action(detail=True, methods=['post'], url_path='approuver')
+    def approuver(self, request, pk=None):
+        if not HasRole([Role.ADMIN, Role.SUPERVISEUR, Role.SUPERADMIN]).has_permission(request, self):
+            raise PermissionDenied("Droits insuffisants.")
+        ajustement = self.get_object()
+        if ajustement.statut != AjustementStock.Statut.EN_ATTENTE:
+            raise ValidationError("Seul un ajustement en attente peut être approuvé.")
+
+        with transaction.atomic():
+            stock, _ = StockDepot.objects.get_or_create(
+                depot=ajustement.depot, produit=ajustement.produit,
+                defaults={'quantite': 0},
+            )
+            avant = stock.quantite
+            stock.quantite += ajustement.quantite
+            stock.save(update_fields=['quantite'])
+            MouvementStock.objects.create(
+                depot=ajustement.depot,
+                produit=ajustement.produit,
+                type_mouvement=MouvementStock.TypeMouvement.AJUSTEMENT,
+                quantite=abs(ajustement.quantite),
+                quantite_avant=avant,
+                quantite_apres=stock.quantite,
+                motif=ajustement.motif,
+                utilisateur=request.user,
+            )
+            ajustement.statut = AjustementStock.Statut.APPROUVE
+            ajustement.traite_par = request.user
+            ajustement.traite_le = timezone.now()
+            ajustement.save(update_fields=['statut', 'traite_par', 'traite_le'])
+
+        return Response(AjustementStockSerializer(ajustement).data)
+
+    @extend_schema(summary="Refuser un ajustement de stock")
+    @action(detail=True, methods=['post'], url_path='refuser')
+    def refuser(self, request, pk=None):
+        if not HasRole([Role.ADMIN, Role.SUPERVISEUR, Role.SUPERADMIN]).has_permission(request, self):
+            raise PermissionDenied("Droits insuffisants.")
+        ajustement = self.get_object()
+        if ajustement.statut != AjustementStock.Statut.EN_ATTENTE:
+            raise ValidationError("Seul un ajustement en attente peut être refusé.")
+        ajustement.statut = AjustementStock.Statut.REFUSE
+        ajustement.traite_par = request.user
+        ajustement.traite_le = timezone.now()
+        ajustement.save(update_fields=['statut', 'traite_par', 'traite_le'])
+        return Response(AjustementStockSerializer(ajustement).data)

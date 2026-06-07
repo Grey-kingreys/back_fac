@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Conge, Document, Employe, ObjectifVente, Presence
+from .models import Conge, Document, Employe, HistoriqueAffectation, ObjectifVente, Presence
 
 
 @admin.register(Employe)
@@ -38,3 +38,10 @@ class ObjectifVenteAdmin(admin.ModelAdmin):
     list_display = ['depot', 'annee', 'mois', 'montant_objectif',
                     'montant_realise', 'taux_realisation']
     list_filter = ['depot__zone__company', 'annee', 'mois']
+
+
+@admin.register(HistoriqueAffectation)
+class HistoriqueAffectationAdmin(admin.ModelAdmin):
+    list_display = ['employe', 'depot_ancien', 'depot_nouveau', 'effectue_par', 'created_at']
+    list_filter = ['depot_nouveau__zone__company']
+    readonly_fields = ['created_at']

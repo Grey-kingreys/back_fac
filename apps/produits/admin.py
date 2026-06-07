@@ -1,6 +1,14 @@
 from django.contrib import admin
 
-from .models import Categorie, Fournisseur, Produit, Unite
+from .models import (
+    Categorie,
+    CommandeFournisseur,
+    Fournisseur,
+    LigneCommandeFournisseur,
+    MouvementDetteFournisseur,
+    Produit,
+    Unite,
+)
 
 
 @admin.register(Categorie)
@@ -28,3 +36,25 @@ class ProduitAdmin(admin.ModelAdmin):
     list_display = ['reference', 'nom', 'company', 'categorie', 'prix_vente', 'is_active']
     list_filter = ['company', 'categorie', 'is_active', 'est_perimable']
     search_fields = ['nom', 'reference']
+
+
+class LigneCommandeFournisseurInline(admin.TabularInline):
+    model = LigneCommandeFournisseur
+    extra = 0
+
+
+@admin.register(CommandeFournisseur)
+class CommandeFournisseurAdmin(admin.ModelAdmin):
+    list_display = ['numero', 'fournisseur', 'statut',
+                    'date_livraison_prevue', 'created_par', 'created_at']
+    list_filter = ['statut', 'fournisseur__company']
+    readonly_fields = ['numero', 'created_at']
+    inlines = [LigneCommandeFournisseurInline]
+
+
+@admin.register(MouvementDetteFournisseur)
+class MouvementDetteFournisseurAdmin(admin.ModelAdmin):
+    list_display = ['fournisseur', 'type_mouvement', 'montant',
+                    'reference', 'created_par', 'created_at']
+    list_filter = ['type_mouvement', 'fournisseur__company']
+    readonly_fields = ['created_at']

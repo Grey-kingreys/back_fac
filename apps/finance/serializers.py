@@ -5,12 +5,16 @@ apps/finance/serializers.py
 from rest_framework import serializers
 
 from .models import (
+    CaisseEntreprise,
     CaissePhysique,
+    CaisseZone,
     CompteMobileMoney,
+    DepenseOperationnelle,
     SessionCaisse,
     TauxChange,
     TransactionCaisse,
     TransactionMobileMoney,
+    VersementCaisse,
 )
 
 
@@ -142,3 +146,66 @@ class TransactionMobileMoneyInputSerializer(serializers.Serializer):
     reference_operateur = serializers.CharField(required=False, allow_blank=True)
     reference_doc = serializers.CharField(required=False, allow_blank=True)
     description = serializers.CharField(required=False, allow_blank=True)
+
+
+# ── Hiérarchie caisses ────────────────────────────────────────────────────────
+class CaisseZoneSerializer(serializers.ModelSerializer):
+    zone_nom = serializers.CharField(source='zone.nom', read_only=True)
+
+    class Meta:
+        model = CaisseZone
+        fields = ['id', 'nom', 'zone', 'zone_nom', 'devise',
+                  'solde_actuel', 'is_active', 'created_at']
+        read_only_fields = ['id', 'zone_nom', 'solde_actuel', 'created_at']
+
+    def create(self, validated_data):
+        validated_data['company'] = self.context['request'].user.company
+        return super().create(validated_data)
+
+
+class CaisseEntrepriseSerializer(serializers.ModelSerializer):
+    company_nom = serializers.CharField(source='company.name', read_only=True)
+
+    class Meta:
+        model = CaisseEntreprise
+        fields = ['id', 'nom', 'company', 'company_nom', 'devise',
+                  'solde_actuel', 'is_active', 'created_at']
+        read_only_fields = ['id', 'company', 'company_nom', 'solde_actuel', 'created_at']
+
+
+class VersementCaisseSerializer(serializers.ModelSerializer):
+    type_label = serializers.CharField(source='get_type_versement_display', read_only=True)
+    effectue_par_nom = serializers.CharField(source='effectue_par.get_full_name', read_only=True)
+    recu_par_nom = serializers.CharField(source='recu_par.get_full_name', read_only=True)
+    ecart = serializers.DecimalField(
+        max_digits=16, decimal_places=2, read_only=True, allow_null=True)
+
+    class Meta:
+        model = VersementCaisse
+        fields = [
+            'id', 'type_versement', 'type_label',
+            'caisse_source_depot', 'caisse_source_zone',
+            'caisse_dest_zone', 'caisse_dest_entreprise',
+            'montant', 'justificatif', 'montant_comptage_receveur',
+            'ecart', 'motif_ecart',
+            'effectue_par', 'effectue_par_nom', 'recu_par', 'recu_par_nom',
+            'created_at',
+        ]
+        read_only_fields = ['id', 'type_label', 'ecart',
+                            'effectue_par', 'effectue_par_nom',
+                            'recu_par_nom', 'created_at']
+
+
+class DepenseOperationnelleSerializer(serializers.ModelSerializer):
+    enregistre_par_nom = serializers.CharField(source='enregistre_par.get_full_name', read_only=True)
+    depot_nom = serializers.CharField(source='depot.nom', read_only=True, allow_null=True)
+
+    class Meta:
+        model = DepenseOperationnelle
+        fields = [
+            'id', 'company', 'depot', 'depot_nom', 'categorie',
+            'montant', 'description', 'date_depense', 'reference',
+            'justificatif', 'enregistre_par', 'enregistre_par_nom',
+            'session_caisse', 'created_at',
+        ]
+        read_only_fields = ['id', 'company', 'enregistre_par', 'enregistre_par_nom', 'depot_nom', 'created_at']

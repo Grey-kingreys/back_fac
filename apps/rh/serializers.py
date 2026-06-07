@@ -4,7 +4,7 @@ apps/rh/serializers.py
 
 from rest_framework import serializers
 
-from .models import Conge, Document, Employe, ObjectifVente, Presence
+from .models import Conge, Document, Employe, HistoriqueAffectation, ObjectifVente, Presence
 
 
 class EmployeListSerializer(serializers.ModelSerializer):
@@ -84,7 +84,9 @@ class DocumentSerializer(serializers.ModelSerializer):
     class Meta:
         model = Document
         fields = ['id', 'type_document', 'type_label', 'titre', 'fichier',
-                  'employe', 'employe_nom', 'reference_externe', 'notes',
+                  'employe', 'employe_nom',
+                  'commande', 'mission', 'transfert',
+                  'reference_externe', 'notes',
                   'uploade_par', 'uploade_par_nom', 'created_at']
         read_only_fields = ['id', 'type_label', 'employe_nom',
                             'uploade_par', 'uploade_par_nom', 'created_at']
@@ -113,3 +115,25 @@ class ObjectifVenteSerializer(serializers.ModelSerializer):
         validated_data['company'] = self.context['request'].user.company
         validated_data['created_by'] = self.context['request'].user
         return super().create(validated_data)
+
+
+class HistoriqueAffectationSerializer(serializers.ModelSerializer):
+    employe_nom = serializers.CharField(source='employe.nom_complet', read_only=True)
+    depot_ancien_code = serializers.SerializerMethodField()
+    depot_nouveau_code = serializers.SerializerMethodField()
+    effectue_par_nom = serializers.CharField(
+        source='effectue_par.get_full_name', read_only=True)
+
+    class Meta:
+        model = HistoriqueAffectation
+        fields = ['id', 'employe', 'employe_nom',
+                  'depot_ancien', 'depot_ancien_code',
+                  'depot_nouveau', 'depot_nouveau_code',
+                  'motif', 'effectue_par', 'effectue_par_nom', 'created_at']
+        read_only_fields = fields
+
+    def get_depot_ancien_code(self, obj):
+        return obj.depot_ancien.code if obj.depot_ancien else None
+
+    def get_depot_nouveau_code(self, obj):
+        return obj.depot_nouveau.code if obj.depot_nouveau else None

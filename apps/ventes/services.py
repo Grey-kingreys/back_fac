@@ -10,7 +10,7 @@ from django.db import transaction
 from apps.produits.models import Produit
 from apps.stocks.services import sortie_stock
 
-from .models import Client, Commande, LigneCommande, Paiement, ParametresFidelite
+from .models import Client, Commande, HistoriquePoints, LigneCommande, Paiement, ParametresFidelite
 
 
 def creer_commande(company, depot, caissier, lignes_data,
@@ -95,7 +95,7 @@ def creer_commande(company, depot, caissier, lignes_data,
         try:
             params = company.parametres_fidelite
             if params.is_active:
-                montant_net = float(total_ttc - remise_totale)
+                montant_net = total_ttc - remise_totale
                 points_gagnes = params.calculer_points(montant_net)
         except ParametresFidelite.DoesNotExist:
             pass
@@ -103,7 +103,23 @@ def creer_commande(company, depot, caissier, lignes_data,
         commande.points_gagnes = points_gagnes
         commande.save(update_fields=['points_gagnes'])
 
-        # 6. Mettre à jour les points client
+        # 6. Mettre à jour les points client + historique
+        if client and points_utilises > 0:
+            HistoriquePoints.objects.create(
+                client=client,
+                type_mouvement=HistoriquePoints.TypeMouvement.UTILISATION,
+                points=-points_utilises,
+                commande=commande,
+                note="Points utilisés en réduction",
+            )
+        if client and points_gagnes > 0:
+            HistoriquePoints.objects.create(
+                client=client,
+                type_mouvement=HistoriquePoints.TypeMouvement.GAIN,
+                points=points_gagnes,
+                commande=commande,
+                note="Points gagnés sur achat",
+            )
         if client and (points_utilises > 0 or points_gagnes > 0):
             client.points_fidelite = (
                 client.points_fidelite - points_utilises + points_gagnes
