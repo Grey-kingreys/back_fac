@@ -8,6 +8,7 @@ import uuid
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
 
+from drf_spectacular.openapi import OpenApiTypes
 from drf_spectacular.utils import OpenApiResponse, extend_schema
 from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -228,6 +229,11 @@ class MeView(APIView):
         serializer = MeSerializer(request.user, context={"request": request})
         return Response(serializer.data, status=status.HTTP_200_OK)
 
+    @extend_schema(
+        summary="Mettre à jour son profil",
+        request=MeUpdateSerializer,
+        responses={200: MeSerializer, 401: OpenApiResponse(description="Non authentifié")},
+    )
     def patch(self, request):
         serializer = MeUpdateSerializer(
             request.user, data=request.data, partial=True, context={"request": request}

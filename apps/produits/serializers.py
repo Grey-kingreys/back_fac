@@ -4,7 +4,16 @@ apps/produits/serializers.py
 
 from rest_framework import serializers
 
-from .models import Categorie, Fournisseur, Produit, Unite
+from .models import (
+    Categorie,
+    CommandeFournisseur,
+    EvaluationFournisseur,
+    Fournisseur,
+    LigneCommandeFournisseur,
+    MouvementDetteFournisseur,
+    Produit,
+    Unite,
+)
 
 
 # ── Catégorie ─────────────────────────────────────────────────────────────────
@@ -86,7 +95,7 @@ class FournisseurDetailSerializer(serializers.ModelSerializer):
         return super().create(validated_data)
 
 
-# ── Produit ──────────────────────────────────────────────────────────────────
+# ── Produit ───────────────────────────────────────────────────────────────────
 class ProduitListSerializer(serializers.ModelSerializer):
     categorie_nom = serializers.CharField(source='categorie.name', read_only=True)
     unite_symbole = serializers.CharField(source='unite.symbole', read_only=True)
@@ -153,3 +162,97 @@ class ProduitDetailSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         validated_data['company'] = self.context['request'].user.company
         return super().create(validated_data)
+
+
+# ── Commandes fournisseurs ────────────────────────────────────────────────────
+class LigneCommandeFournisseurSerializer(serializers.ModelSerializer):
+    produit_nom = serializers.CharField(source='produit.nom', read_only=True)
+    produit_reference = serializers.CharField(source='produit.reference', read_only=True)
+    montant_total = serializers.DecimalField(
+        max_digits=14, decimal_places=2, read_only=True)
+
+    class Meta:
+        model = LigneCommandeFournisseur
+        fields = ['id', 'produit', 'produit_nom', 'produit_reference',
+                  'quantite_commandee', 'prix_unitaire', 'quantite_recue', 'montant_total']
+        read_only_fields = ['id', 'produit_nom', 'produit_reference',
+                            'montant_total', 'quantite_recue']
+
+
+class CommandeFournisseurListSerializer(serializers.ModelSerializer):
+    fournisseur_nom = serializers.CharField(source='fournisseur.nom', read_only=True)
+    statut_label = serializers.CharField(source='get_statut_display', read_only=True)
+
+    class Meta:
+        model = CommandeFournisseur
+        fields = ['id', 'numero', 'fournisseur', 'fournisseur_nom',
+                  'statut', 'statut_label', 'date_livraison_prevue', 'created_at']
+        read_only_fields = fields
+
+
+class CommandeFournisseurDetailSerializer(serializers.ModelSerializer):
+    fournisseur_nom = serializers.CharField(source='fournisseur.nom', read_only=True)
+    statut_label = serializers.CharField(source='get_statut_display', read_only=True)
+    depot_nom = serializers.CharField(source='depot_destination.nom', read_only=True)
+    lignes = LigneCommandeFournisseurSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = CommandeFournisseur
+        fields = ['id', 'numero', 'fournisseur', 'fournisseur_nom',
+                  'statut', 'statut_label', 'depot_destination', 'depot_nom',
+                  'date_livraison_prevue', 'notes', 'lignes', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'numero', 'fournisseur_nom', 'statut_label',
+                            'depot_nom', 'lignes', 'created_at', 'updated_at']
+
+
+class LigneCommandeFournisseurCreateSerializer(serializers.Serializer):
+    produit = serializers.PrimaryKeyRelatedField(queryset=Produit.objects.all())
+    quantite_commandee = serializers.DecimalField(
+        max_digits=12, decimal_places=3, min_value=0.001)
+    prix_unitaire = serializers.DecimalField(
+        max_digits=14, decimal_places=2, min_value=0)
+
+
+class CommandeFournisseurCreateSerializer(serializers.ModelSerializer):
+    lignes = LigneCommandeFournisseurCreateSerializer(many=True)
+
+    class Meta:
+        model = CommandeFournisseur
+        fields = ['fournisseur', 'depot_destination', 'date_livraison_prevue', 'notes', 'lignes']
+
+    def create(self, validated_data):
+        lignes_data = validated_data.pop('lignes')
+        validated_data['company'] = self.context['request'].user.company
+        validated_data['created_par'] = self.context['request'].user
+        commande = CommandeFournisseur.objects.create(**validated_data)
+        for ligne in lignes_data:
+            LigneCommandeFournisseur.objects.create(commande=commande, **ligne)
+        return commande
+
+
+class MouvementDetteFournisseurSerializer(serializers.ModelSerializer):
+    type_label = serializers.CharField(source='get_type_mouvement_display', read_only=True)
+    created_par_nom = serializers.CharField(source='created_par.get_full_name', read_only=True)
+
+    class Meta:
+        model = MouvementDetteFournisseur
+        fields = ['id', 'fournisseur', 'type_mouvement', 'type_label',
+                  'montant', 'reference', 'notes',
+                  'created_par', 'created_par_nom', 'created_at']
+        read_only_fields = ['id', 'type_label', 'created_par', 'created_par_nom', 'created_at']
+
+
+# ── Évaluations fournisseurs ──────────────────────────────────────────────────
+class EvaluationFournisseurSerializer(serializers.ModelSerializer):
+    note_globale = serializers.ReadOnlyField()
+    evalue_par_nom = serializers.CharField(source='evalue_par.get_full_name', read_only=True)
+    fournisseur_nom = serializers.CharField(source='fournisseur.nom', read_only=True)
+
+    class Meta:
+        model = EvaluationFournisseur
+        fields = [
+            'id', 'fournisseur', 'fournisseur_nom', 'commande',
+            'note_qualite', 'note_delai', 'note_service', 'note_globale',
+            'commentaire', 'evalue_par', 'evalue_par_nom', 'created_at',
+        ]
+        read_only_fields = ['id', 'evalue_par', 'evalue_par_nom', 'note_globale', 'fournisseur_nom', 'created_at']

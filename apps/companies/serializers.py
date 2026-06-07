@@ -5,6 +5,8 @@ R1-B08 — Serializers CRUD Zones et Dépôts
 
 from rest_framework import serializers
 
+from apps.accounts.models import CustomUser
+
 from .models import Depot, Zone
 
 
@@ -149,6 +151,7 @@ class DepotListSerializer(serializers.ModelSerializer):
     """
     zone_name = serializers.CharField(source='zone.name', read_only=True)
     zone_code = serializers.CharField(source='zone.code', read_only=True)
+    gestionnaire_nom = serializers.CharField(source='gestionnaire.get_full_name', read_only=True, allow_null=True)
 
     class Meta:
         model = Depot
@@ -161,6 +164,8 @@ class DepotListSerializer(serializers.ModelSerializer):
             'zone_id',
             'zone_name',
             'zone_code',
+            'gestionnaire_id',
+            'gestionnaire_nom',
             'created_at',
         ]
         read_only_fields = fields
@@ -180,6 +185,7 @@ class DepotDetailSerializer(serializers.ModelSerializer):
     zone_longitude = serializers.DecimalField(
         source='zone.longitude', max_digits=9, decimal_places=6, read_only=True
     )
+    gestionnaire_nom = serializers.CharField(source='gestionnaire.get_full_name', read_only=True, allow_null=True)
 
     class Meta:
         model = Depot
@@ -194,6 +200,8 @@ class DepotDetailSerializer(serializers.ModelSerializer):
             'zone_code',
             'zone_latitude',
             'zone_longitude',
+            'gestionnaire_id',
+            'gestionnaire_nom',
             'created_at',
             'updated_at',
         ]
@@ -209,6 +217,12 @@ class DepotCreateUpdateSerializer(serializers.ModelSerializer):
         queryset=Zone.objects.filter(is_active=True),
         source='zone',
     )
+    gestionnaire_id = serializers.PrimaryKeyRelatedField(
+        queryset=CustomUser.objects.none(),  # surchargé dans __init__ selon la company
+        source='gestionnaire',
+        allow_null=True,
+        required=False,
+    )
 
     class Meta:
         model = Depot
@@ -218,7 +232,18 @@ class DepotCreateUpdateSerializer(serializers.ModelSerializer):
             'address',
             'is_active',
             'zone_id',
+            'gestionnaire_id',
         ]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        request = self.context.get('request')
+        if request and request.user.company:
+            self.fields['gestionnaire_id'].queryset = CustomUser.objects.filter(
+                company=request.user.company, is_active=True
+            )
+        else:
+            self.fields['gestionnaire_id'].queryset = CustomUser.objects.none()
 
     def validate_zone_id(self, zone):
         """La zone doit appartenir à la company de l'utilisateur connecté."""

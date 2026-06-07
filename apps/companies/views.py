@@ -309,14 +309,94 @@ class DepotViewSet(CompanyObjectMixin, CompanyFilterMixin, GenericViewSet, ListM
             status=status.HTTP_200_OK,
         )
 
-    # ── GET /api/depots/{id}/dashboard/ ─────────────────────────────────────
+    # ── GET /api/depots/{id}/dashboard/ ──────────────────────────────────────
     @extend_schema(
-        summary="Dashboard d'un dépôt (placeholder)",
-        description="Placeholder — sera enrichi dans les releases suivantes (stocks, ventes, caisse).",
-        responses={200: OpenApiResponse(description="Objet vide — données à venir")},
+        summary="Dashboard temps réel d'un dépôt",
+        description="KPIs : stocks critiques, solde caisse, sessions ouvertes, ventes du jour, "
+                    "transferts en cours, missions actives.",
     )
     @action(detail=True, methods=['get'], url_path='dashboard')
     def dashboard(self, request, pk=None):
+        from decimal import Decimal
+
+        from django.utils import timezone
+
         instance = self.get_object()
         self._check_company(request, instance)
-        return Response({})
+
+        today = timezone.now().date()
+
+        # Stocks critiques
+        from apps.stocks.models import StockDepot
+        stocks_qs = StockDepot.objects.filter(depot=instance).select_related('produit')
+        stock_critique = [
+            {
+                'produit_id': s.produit_id,
+                'produit_reference': s.produit.reference,
+                'produit_nom': s.produit.nom,
+                'quantite': str(s.quantite),
+                'seuil_alerte': str(s.produit.seuil_alerte),
+            }
+            for s in stocks_qs if s.en_alerte
+        ]
+
+        # Caisse
+        solde_caisse = Decimal('0')
+        sessions_ouvertes = 0
+        try:
+            from apps.finance.models import CaissePhysique, SessionCaisse
+            caisse = CaissePhysique.objects.get(depot=instance)
+            solde_caisse = caisse.solde_actuel
+            sessions_ouvertes = SessionCaisse.objects.filter(
+                caisse=caisse,
+                statut=SessionCaisse.Statut.OUVERTE,
+            ).count()
+        except Exception:
+            pass
+
+        # Ventes du jour
+        from django.db.models import Sum as DjSum
+
+        from apps.ventes.models import Commande
+        commandes_jour = Commande.objects.filter(
+            depot=instance,
+            created_at__date=today,
+        ).exclude(statut=Commande.Statut.ANNULEE)
+        ventes_du_jour = {
+            'count': commandes_jour.count(),
+            'montant_ttc': str(
+                commandes_jour.aggregate(t=DjSum('montant_ttc'))['t'] or Decimal('0')
+            ),
+        }
+
+        # Transferts en cours
+        from apps.stocks.models import TransfertStock
+        transferts_en_cours = TransfertStock.objects.filter(
+            depot_source=instance,
+            statut=TransfertStock.Statut.EN_TRANSIT,
+        ).count()
+
+        # Missions actives
+        from apps.logistique.models import Mission
+        missions_actives = Mission.objects.filter(
+            depot_depart=instance,
+            statut__in=[
+                Mission.Statut.PLANIFIEE,
+                Mission.Statut.CHARGEMENT,
+                Mission.Statut.EN_TRANSIT,
+            ],
+        ).count()
+
+        return Response({
+            'depot': {
+                'id': instance.pk,
+                'code': instance.code,
+                'name': instance.name,
+            },
+            'stock_critique': stock_critique,
+            'solde_caisse': str(solde_caisse),
+            'sessions_ouvertes': sessions_ouvertes,
+            'ventes_du_jour': ventes_du_jour,
+            'transferts_en_cours': transferts_en_cours,
+            'missions_actives': missions_actives,
+        })

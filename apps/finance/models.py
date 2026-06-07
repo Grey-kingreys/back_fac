@@ -55,6 +55,7 @@ class CaissePhysique(models.Model):
         related_name='caisse', verbose_name=_("Dépôt"),
     )
     nom = models.CharField(_("Nom"), max_length=150)
+    devise = models.CharField(_("Devise"), max_length=10, default='GNF')
     solde_actuel = models.DecimalField(
         _("Solde actuel (GNF)"), max_digits=16, decimal_places=2, default=0,
     )
@@ -248,3 +249,171 @@ class TransactionMobileMoney(models.Model):
 
     def __str__(self):
         return f"{self.get_type_transaction_display()} {self.montant} — {self.compte}"
+
+
+# ── Hiérarchie caisses : Zone + Entreprise ────────────────────────────────────
+class CaisseZone(models.Model):
+    """Caisse consolidée au niveau zone (agrège les CaissePhysique de ses dépôts)."""
+    company = models.ForeignKey(
+        'companies.Company', on_delete=models.CASCADE,
+        related_name='caisses_zone', verbose_name=_("Entreprise"),
+    )
+    zone = models.OneToOneField(
+        'companies.Zone', on_delete=models.PROTECT,
+        related_name='caisse', verbose_name=_("Zone"),
+    )
+    nom = models.CharField(_("Nom"), max_length=150)
+    devise = models.CharField(_("Devise"), max_length=10, default='GNF')
+    solde_actuel = models.DecimalField(
+        _("Solde actuel (GNF)"), max_digits=16, decimal_places=2, default=0,
+    )
+    is_active = models.BooleanField(_("Active"), default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = _("Caisse zone")
+        verbose_name_plural = _("Caisses zone")
+
+    def __str__(self):
+        return f"{self.nom} — {self.zone}"
+
+
+class CaisseEntreprise(models.Model):
+    """Caisse consolidée au niveau entreprise (agrège les CaisseZone)."""
+    company = models.OneToOneField(
+        'companies.Company', on_delete=models.PROTECT,
+        related_name='caisse_entreprise', verbose_name=_("Entreprise"),
+    )
+    nom = models.CharField(_("Nom"), max_length=150)
+    devise = models.CharField(_("Devise"), max_length=10, default='GNF')
+    solde_actuel = models.DecimalField(
+        _("Solde actuel (GNF)"), max_digits=16, decimal_places=2, default=0,
+    )
+    is_active = models.BooleanField(_("Active"), default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = _("Caisse entreprise")
+        verbose_name_plural = _("Caisses entreprise")
+
+    def __str__(self):
+        return f"{self.nom} — {self.company}"
+
+
+class VersementCaisse(models.Model):
+    """Versement inter-niveaux : Dépôt→Zone ou Zone→Entreprise."""
+
+    class TypeVersement(models.TextChoices):
+        DEPOT_VERS_ZONE = 'depot_vers_zone', _("Dépôt → Zone")
+        ZONE_VERS_ENTREPRISE = 'zone_vers_entreprise', _("Zone → Entreprise")
+
+    type_versement = models.CharField(
+        _("Type versement"), max_length=30, choices=TypeVersement.choices,
+    )
+    caisse_source_depot = models.ForeignKey(
+        CaissePhysique, on_delete=models.PROTECT,
+        null=True, blank=True, related_name='versements_source',
+        verbose_name=_("Caisse source (dépôt)"),
+    )
+    caisse_source_zone = models.ForeignKey(
+        CaisseZone, on_delete=models.PROTECT,
+        null=True, blank=True, related_name='versements_source',
+        verbose_name=_("Caisse source (zone)"),
+    )
+    caisse_dest_zone = models.ForeignKey(
+        CaisseZone, on_delete=models.PROTECT,
+        null=True, blank=True, related_name='versements_dest',
+        verbose_name=_("Caisse destination (zone)"),
+    )
+    caisse_dest_entreprise = models.ForeignKey(
+        CaisseEntreprise, on_delete=models.PROTECT,
+        null=True, blank=True, related_name='versements_dest',
+        verbose_name=_("Caisse destination (entreprise)"),
+    )
+    montant = models.DecimalField(_("Montant"), max_digits=16, decimal_places=2)
+    justificatif = models.FileField(
+        _("Justificatif"), upload_to='finance/versements/%Y/%m/',
+        null=True, blank=True,
+    )
+    montant_comptage_receveur = models.DecimalField(
+        _("Montant comptage receveur (double comptage)"),
+        max_digits=16, decimal_places=2, null=True, blank=True,
+    )
+    motif_ecart = models.TextField(_("Motif écart"), blank=True)
+    effectue_par = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.PROTECT,
+        related_name='versements_effectues', verbose_name=_("Effectué par"),
+    )
+    recu_par = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
+        null=True, blank=True, related_name='versements_recus',
+        verbose_name=_("Reçu par"),
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = _("Versement caisse")
+        verbose_name_plural = _("Versements caisse")
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.get_type_versement_display()} — {self.montant} GNF"
+
+    @property
+    def ecart(self):
+        if self.montant_comptage_receveur is None:
+            return None
+        return self.montant_comptage_receveur - self.montant
+
+
+# ── Dépenses opérationnelles ──────────────────────────────────────────────────
+class DepenseOperationnelle(models.Model):
+    """Dépense opérationnelle par catégorie (carburant, maintenance, salaires…)."""
+
+    class Categorie(models.TextChoices):
+        CARBURANT = 'carburant', _("Carburant")
+        MAINTENANCE = 'maintenance', _("Maintenance")
+        SALAIRES = 'salaires', _("Salaires")
+        LOYER = 'loyer', _("Loyer")
+        FOURNITURES = 'fournitures', _("Fournitures")
+        TRANSPORT = 'transport', _("Transport")
+        AUTRE = 'autre', _("Autre")
+
+    company = models.ForeignKey(
+        'companies.Company', on_delete=models.CASCADE,
+        related_name='depenses_operationnelles', verbose_name=_("Entreprise"),
+    )
+    depot = models.ForeignKey(
+        'companies.Depot', on_delete=models.PROTECT,
+        null=True, blank=True, related_name='depenses_operationnelles',
+        verbose_name=_("Dépôt"),
+    )
+    categorie = models.CharField(
+        _("Catégorie"), max_length=20, choices=Categorie.choices,
+    )
+    montant = models.DecimalField(_("Montant (GNF)"), max_digits=14, decimal_places=2)
+    description = models.TextField(_("Description"))
+    date_depense = models.DateField(_("Date de la dépense"))
+    reference = models.CharField(_("Référence"), max_length=100, blank=True)
+    justificatif = models.FileField(
+        _("Justificatif"), upload_to='finance/depenses/%Y/%m/',
+        null=True, blank=True,
+    )
+    enregistre_par = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.PROTECT,
+        related_name='depenses_enregistrees', verbose_name=_("Enregistré par"),
+    )
+    session_caisse = models.ForeignKey(
+        SessionCaisse, on_delete=models.SET_NULL,
+        null=True, blank=True, related_name='depenses',
+        verbose_name=_("Session caisse liée"),
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = _("Dépense opérationnelle")
+        verbose_name_plural = _("Dépenses opérationnelles")
+        ordering = ['-date_depense']
+
+    def __str__(self):
+        return f"{self.get_categorie_display()} — {self.montant} GNF ({self.date_depense})"

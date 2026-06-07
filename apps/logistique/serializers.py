@@ -4,7 +4,16 @@ apps/logistique/serializers.py
 
 from rest_framework import serializers
 
-from .models import LigneMission, Mission, PositionGPS, Vehicule
+from .models import (
+    ConsommationCarburant,
+    DocumentVehicule,
+    LigneMission,
+    Maintenance,
+    Mission,
+    Panne,
+    PositionGPS,
+    Vehicule,
+)
 
 
 class VehiculeSerializer(serializers.ModelSerializer):
@@ -17,7 +26,8 @@ class VehiculeSerializer(serializers.ModelSerializer):
         model = Vehicule
         fields = [
             'id', 'immatriculation', 'type_vehicule', 'type_label',
-            'marque', 'modele', 'capacite_kg', 'statut', 'statut_label',
+            'marque', 'modele', 'annee', 'capacite_kg', 'kilometrage_actuel',
+            'statut', 'statut_label',
             'chauffeur_attitré', 'chauffeur_nom',
             'has_nfc', 'nfc_tag', 'is_active', 'created_at',
         ]
@@ -132,3 +142,85 @@ class SignatureArriveeSerializer(serializers.Serializer):
         help_text="[{ligne_id: N, quantite_recue: X}]",
     )
     motif_litige = serializers.CharField(required=False, allow_blank=True)
+
+
+# ── Maintenance ───────────────────────────────────────────────────────────────
+class MaintenanceSerializer(serializers.ModelSerializer):
+    type_label = serializers.CharField(
+        source='get_type_maintenance_display', read_only=True)
+    statut_label = serializers.CharField(source='get_statut_display', read_only=True)
+    vehicule_immat = serializers.CharField(
+        source='vehicule.immatriculation', read_only=True)
+    effectue_par_nom = serializers.CharField(
+        source='effectue_par.get_full_name', read_only=True)
+
+    class Meta:
+        model = Maintenance
+        fields = [
+            'id', 'vehicule', 'vehicule_immat',
+            'type_maintenance', 'type_label',
+            'description', 'kilometrage_au_moment', 'cout',
+            'statut', 'statut_label',
+            'date_planifiee', 'date_reelle',
+            'effectue_par', 'effectue_par_nom',
+            'notes', 'created_at',
+        ]
+        read_only_fields = ['id', 'type_label', 'statut_label',
+                            'vehicule_immat', 'effectue_par_nom', 'created_at']
+
+
+# ── Pannes ────────────────────────────────────────────────────────────────────
+class PanneSerializer(serializers.ModelSerializer):
+    statut_label = serializers.CharField(source='get_statut_display', read_only=True)
+    vehicule_immat = serializers.CharField(
+        source='vehicule.immatriculation', read_only=True)
+    declare_par_nom = serializers.CharField(
+        source='declare_par.get_full_name', read_only=True)
+
+    class Meta:
+        model = Panne
+        fields = [
+            'id', 'vehicule', 'vehicule_immat',
+            'description', 'date_declaration',
+            'mission', 'cout_reparation',
+            'statut', 'statut_label',
+            'declare_par', 'declare_par_nom', 'resolu_le',
+        ]
+        read_only_fields = ['id', 'statut_label', 'vehicule_immat',
+                            'declare_par', 'declare_par_nom',
+                            'date_declaration', 'resolu_le']
+
+
+# ── Documents véhicule ────────────────────────────────────────────────────────
+class DocumentVehiculeSerializer(serializers.ModelSerializer):
+    type_label = serializers.CharField(source='get_type_document_display', read_only=True)
+    vehicule_immat = serializers.CharField(
+        source='vehicule.immatriculation', read_only=True)
+    is_expire = serializers.BooleanField(read_only=True)
+
+    class Meta:
+        model = DocumentVehicule
+        fields = [
+            'id', 'vehicule', 'vehicule_immat',
+            'type_document', 'type_label',
+            'fichier', 'date_expiration', 'is_expire',
+            'notes', 'created_at',
+        ]
+        read_only_fields = ['id', 'type_label', 'vehicule_immat',
+                            'is_expire', 'created_at']
+
+
+# ── Consommation carburant ────────────────────────────────────────────────────
+class ConsommationCarburantSerializer(serializers.ModelSerializer):
+    montant_total = serializers.ReadOnlyField()
+    vehicule_immat = serializers.CharField(source='vehicule.immatriculation', read_only=True)
+
+    class Meta:
+        model = ConsommationCarburant
+        fields = [
+            'id', 'vehicule', 'vehicule_immat', 'mission',
+            'type_carburant', 'quantite_litres', 'prix_par_litre',
+            'montant_total', 'kilometrage', 'date_plein',
+            'station', 'enregistre_par', 'created_at',
+        ]
+        read_only_fields = ['id', 'enregistre_par', 'montant_total', 'vehicule_immat', 'created_at']

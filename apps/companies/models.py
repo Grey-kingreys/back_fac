@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.db import models
 from django.utils.text import slugify
 from django.utils.translation import gettext_lazy as _
@@ -105,6 +106,11 @@ class Depot(models.Model):
     code = models.CharField(_("Code"), max_length=30, unique=True)
     address = models.TextField(_("Adresse"), blank=True)
     is_active = models.BooleanField(_("Actif"), default=True)
+    gestionnaire = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='depots_geres', verbose_name=_("Gestionnaire du dépôt"),
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

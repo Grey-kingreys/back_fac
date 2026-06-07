@@ -1,6 +1,15 @@
 from django.contrib import admin
 
-from .models import Client, Commande, LigneCommande, Paiement, ParametresFidelite
+from .models import (
+    Client,
+    Commande,
+    Devis,
+    HistoriquePoints,
+    LigneCommande,
+    Paiement,
+    ParametresFidelite,
+    RetourCommande,
+)
 
 
 @admin.register(ParametresFidelite)
@@ -37,3 +46,25 @@ class CommandeAdmin(admin.ModelAdmin):
     search_fields = ['numero', 'client__nom']
     readonly_fields = ['numero', 'created_at', 'updated_at']
     inlines = [LigneCommandeInline, PaiementInline]
+
+
+@admin.register(HistoriquePoints)
+class HistoriquePointsAdmin(admin.ModelAdmin):
+    list_display = ['client', 'type_mouvement', 'points', 'commande', 'created_at']
+    list_filter = ['type_mouvement']
+    readonly_fields = ['created_at']
+
+
+@admin.register(Devis)
+class DevisAdmin(admin.ModelAdmin):
+    list_display = ['numero', 'company', 'client', 'statut', 'date_expiration', 'created_at']
+    list_filter = ['company', 'statut']
+    search_fields = ['numero']
+    readonly_fields = ['numero', 'created_at', 'updated_at']
+
+
+@admin.register(RetourCommande)
+class RetourCommandeAdmin(admin.ModelAdmin):
+    list_display = ['commande', 'motif', 'type_retour', 'montant_rembourse', 'created_at']
+    list_filter = ['motif', 'type_retour']
+    readonly_fields = ['created_at']

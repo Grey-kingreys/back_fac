@@ -366,10 +366,10 @@ class TestDepotDestroy:
 @pytest.mark.django_db
 class TestDepotDashboard:
 
-    def test_dashboard_retourne_objet_vide(self, client_admin_a, depot_a):
+    def test_dashboard_retourne_donnees(self, client_admin_a, depot_a):
         res = client_admin_a.get(depot_dashboard_url(depot_a.id))
         assert res.status_code == status.HTTP_200_OK
-        assert res.data == {}
+        assert "depot" in res.data
 
     def test_dashboard_refuse_autre_company(self, client_admin_a, depot_b):
         res = client_admin_a.get(depot_dashboard_url(depot_b.id))

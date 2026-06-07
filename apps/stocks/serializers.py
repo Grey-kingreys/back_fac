@@ -4,7 +4,16 @@ apps/stocks/serializers.py
 
 from rest_framework import serializers
 
-from .models import LigneTransfert, LotStock, MouvementStock, StockDepot, TransfertStock
+from .models import (
+    AjustementStock,
+    Inventaire,
+    LigneInventaire,
+    LigneTransfert,
+    LotStock,
+    MouvementStock,
+    StockDepot,
+    TransfertStock,
+)
 
 
 class StockDepotSerializer(serializers.ModelSerializer):
@@ -177,3 +186,79 @@ class ReceptionTransfertSerializer(serializers.Serializer):
         child=serializers.DictField(child=serializers.DecimalField(
             max_digits=12, decimal_places=3))
     )
+
+
+# ── Inventaires ───────────────────────────────────────────────────────────────
+class LigneInventaireSerializer(serializers.ModelSerializer):
+    produit_reference = serializers.CharField(source='produit.reference', read_only=True)
+    produit_nom = serializers.CharField(source='produit.nom', read_only=True)
+    ecart = serializers.DecimalField(
+        max_digits=12, decimal_places=3, read_only=True, allow_null=True)
+
+    class Meta:
+        model = LigneInventaire
+        fields = ['id', 'produit', 'produit_reference', 'produit_nom',
+                  'quantite_theorique', 'quantite_comptee', 'ecart']
+        read_only_fields = ['id', 'produit_reference', 'produit_nom',
+                            'quantite_theorique', 'ecart']
+
+
+class InventaireListSerializer(serializers.ModelSerializer):
+    depot_code = serializers.CharField(source='depot.code', read_only=True)
+    statut_label = serializers.CharField(source='get_statut_display', read_only=True)
+    nb_lignes = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Inventaire
+        fields = ['id', 'numero', 'depot', 'depot_code', 'statut', 'statut_label',
+                  'nb_lignes', 'created_at', 'valide_le']
+        read_only_fields = fields
+
+    def get_nb_lignes(self, obj):
+        return obj.lignes.count()
+
+
+class InventaireDetailSerializer(serializers.ModelSerializer):
+    depot_nom = serializers.CharField(source='depot.nom', read_only=True)
+    statut_label = serializers.CharField(source='get_statut_display', read_only=True)
+    cree_par_nom = serializers.CharField(source='cree_par.get_full_name', read_only=True)
+    lignes = LigneInventaireSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = Inventaire
+        fields = ['id', 'numero', 'depot', 'depot_nom', 'statut', 'statut_label',
+                  'notes', 'lignes', 'cree_par', 'cree_par_nom',
+                  'created_at', 'valide_le']
+        read_only_fields = fields
+
+
+class InventaireCreateSerializer(serializers.Serializer):
+    depot = serializers.PrimaryKeyRelatedField(
+        queryset=__import__('apps.companies.models', fromlist=['Depot']).Depot.objects.all()
+    )
+    notes = serializers.CharField(required=False, allow_blank=True, default='')
+
+
+class ValiderInventaireSerializer(serializers.Serializer):
+    lignes = serializers.ListField(
+        child=serializers.DictField(),
+        help_text="[{ligne_id: int, quantite_comptee: decimal}, ...]",
+    )
+
+
+# ── Ajustements de stock ──────────────────────────────────────────────────────
+class AjustementStockSerializer(serializers.ModelSerializer):
+    statut_label = serializers.CharField(source='get_statut_display', read_only=True)
+    produit_nom = serializers.CharField(source='produit.nom', read_only=True)
+    depot_code = serializers.CharField(source='depot.code', read_only=True)
+    demande_par_nom = serializers.CharField(source='demande_par.get_full_name', read_only=True)
+
+    class Meta:
+        model = AjustementStock
+        fields = ['id', 'depot', 'depot_code', 'produit', 'produit_nom',
+                  'quantite', 'motif', 'statut', 'statut_label',
+                  'demande_par', 'demande_par_nom', 'traite_par',
+                  'created_at', 'traite_le']
+        read_only_fields = ['id', 'statut_label', 'produit_nom', 'depot_code',
+                            'demande_par', 'demande_par_nom', 'traite_par',
+                            'statut', 'created_at', 'traite_le']

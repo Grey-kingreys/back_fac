@@ -15,12 +15,13 @@ from rest_framework.viewsets import GenericViewSet
 from apps.accounts.models import Role
 from apps.accounts.permissions import CompanyFilterMixin, HasRole
 
-from .models import Conge, Document, Employe, ObjectifVente, Presence
+from .models import Conge, Document, Employe, HistoriqueAffectation, ObjectifVente, Presence
 from .serializers import (
     CongeSerializer,
     DocumentSerializer,
     EmployeDetailSerializer,
     EmployeListSerializer,
+    HistoriqueAffectationSerializer,
     ObjectifVenteSerializer,
     PresenceSerializer,
 )
@@ -98,6 +99,15 @@ class EmployeViewSet(CompanyFilterMixin, GenericViewSet,
         employe = self.get_object()
         qs = employe.documents.order_by('-created_at')
         return Response(DocumentSerializer(qs, many=True).data)
+
+    @extend_schema(summary="Historique des affectations d'un employé")
+    @action(detail=True, methods=['get'], url_path='affectations')
+    def affectations(self, request, pk=None):
+        employe = self.get_object()
+        qs = employe.historique_affectations.select_related(
+            'depot_ancien', 'depot_nouveau', 'effectue_par'
+        ).order_by('-created_at')
+        return Response(HistoriqueAffectationSerializer(qs, many=True).data)
 
 
 # ── Présences ─────────────────────────────────────────────────────────────────
@@ -210,6 +220,37 @@ class DocumentViewSet(CompanyFilterMixin, GenericViewSet,
         if self.action in ('list', 'retrieve'):
             return [IsAuthenticated(), HasRole(RH_READ)]
         return [IsAuthenticated(), HasRole(RH_WRITE)]
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        type_doc = self.request.query_params.get('type_document')
+        employe_id = self.request.query_params.get('employe')
+        commande_id = self.request.query_params.get('commande')
+        mission_id = self.request.query_params.get('mission')
+        transfert_id = self.request.query_params.get('transfert')
+        search = self.request.query_params.get('search')
+        date_debut = self.request.query_params.get('date_debut')
+        date_fin = self.request.query_params.get('date_fin')
+        if type_doc:
+            qs = qs.filter(type_document=type_doc)
+        if employe_id:
+            qs = qs.filter(employe_id=employe_id)
+        if commande_id:
+            qs = qs.filter(commande_id=commande_id)
+        if mission_id:
+            qs = qs.filter(mission_id=mission_id)
+        if transfert_id:
+            qs = qs.filter(transfert_id=transfert_id)
+        if search:
+            from django.db.models import Q
+            qs = qs.filter(
+                Q(titre__icontains=search) | Q(reference_externe__icontains=search)
+            )
+        if date_debut:
+            qs = qs.filter(created_at__date__gte=date_debut)
+        if date_fin:
+            qs = qs.filter(created_at__date__lte=date_fin)
+        return qs
 
     def create(self, request, *args, **kwargs):
         s = DocumentSerializer(data=request.data, context={'request': request})

@@ -17,12 +17,25 @@ from rest_framework.viewsets import GenericViewSet
 from apps.accounts.models import Role
 from apps.accounts.permissions import CompanyFilterMixin, HasRole
 
-from .models import LigneMission, Mission, PositionGPS, Vehicule
+from .models import (
+    ConsommationCarburant,
+    DocumentVehicule,
+    LigneMission,
+    Maintenance,
+    Mission,
+    Panne,
+    PositionGPS,
+    Vehicule,
+)
 from .serializers import (
+    ConsommationCarburantSerializer,
+    DocumentVehiculeSerializer,
     LigneMissionSerializer,
+    MaintenanceSerializer,
     MissionCreateSerializer,
     MissionDetailSerializer,
     MissionListSerializer,
+    PanneSerializer,
     PositionGPSSerializer,
     SignatureArriveeSerializer,
     VehiculeSerializer,
@@ -125,11 +138,11 @@ class MissionViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
         if vehicule.statut == Vehicule.Statut.EN_MISSION:
             raise ValidationError("Ce véhicule est déjà en mission.")
 
-        from apps.accounts.models import User
+        from apps.accounts.models import CustomUser
         try:
-            chauffeur = User.objects.get(
+            chauffeur = CustomUser.objects.get(
                 pk=d['chauffeur'], company=company, role=Role.CHAUFFEUR, is_active=True)
-        except User.DoesNotExist:
+        except CustomUser.DoesNotExist:
             raise ValidationError({'chauffeur': "Chauffeur introuvable."})
 
         try:
@@ -286,3 +299,274 @@ class MissionViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
         mission = self.get_object()
         qs = mission.positions.order_by('-enregistre_le')
         return Response(PositionGPSSerializer(qs, many=True).data)
+
+    @extend_schema(summary="Obtenir le QR code d'une mission (image PNG base64)")
+    @action(detail=True, methods=['get'], url_path='qr')
+    def qr(self, request, pk=None):
+        import base64
+        from io import BytesIO
+
+        from django.http import HttpResponse
+
+        import qrcode
+
+        mission = self.get_object()
+        img = qrcode.make(str(mission.qr_code))
+        buffer = BytesIO()
+        img.save(buffer, format='PNG')
+        buffer.seek(0)
+        b64 = base64.b64encode(buffer.read()).decode('utf-8')
+        return Response({'qr_code': str(mission.qr_code), 'image_base64': b64})
+
+    @extend_schema(summary="Scanner le QR code — passe la mission en CHARGEMENT")
+    @action(detail=False, methods=['post'], url_path='scanner-qr')
+    def scanner_qr(self, request):
+        qr_value = request.data.get('qr_code')
+        if not qr_value:
+            raise ValidationError({'qr_code': "Ce champ est obligatoire."})
+        try:
+            import uuid
+            mission = Mission.objects.get(qr_code=uuid.UUID(str(qr_value)))
+        except (Mission.DoesNotExist, ValueError):
+            raise ValidationError("QR code invalide ou mission introuvable.")
+        if mission.statut != Mission.Statut.PLANIFIEE:
+            raise ValidationError(
+                f"La mission est en statut '{mission.get_statut_display()}', "
+                "seules les missions Planifiées peuvent être scannées.")
+        if request.user != mission.chauffeur and not request.user.is_superadmin:
+            raise PermissionDenied("Ce QR code ne correspond pas à votre mission.")
+        mission.statut = Mission.Statut.CHARGEMENT
+        mission.save(update_fields=['statut'])
+        return Response(MissionDetailSerializer(mission).data)
+
+    @extend_schema(summary="Bon de livraison PDF signé")
+    @action(detail=True, methods=['get'], url_path='bon-livraison')
+    def bon_livraison_pdf(self, request, pk=None):
+        from io import BytesIO
+
+        from django.http import HttpResponse
+
+        import reportlab.lib.pagesizes as ps
+        from reportlab.lib import colors
+        from reportlab.lib.styles import getSampleStyleSheet
+        from reportlab.platypus import Image, Paragraph, SimpleDocTemplate, Table, TableStyle
+
+        mission = self.get_object()
+        buffer = BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=ps.A4)
+        styles = getSampleStyleSheet()
+        elements = []
+
+        elements.append(Paragraph(f"BON DE LIVRAISON — {mission.numero}", styles['Title']))
+        elements.append(Paragraph(
+            f"Date départ : {mission.date_depart_reelle or mission.date_depart_prevue or '—'}",
+            styles['Normal']))
+        elements.append(Paragraph(
+            f"Chauffeur : {mission.chauffeur.get_full_name()}", styles['Normal']))
+        elements.append(Paragraph(
+            f"Véhicule : {mission.vehicule.immatriculation}", styles['Normal']))
+        elements.append(Paragraph(
+            f"De : {mission.depot_depart.code} → {mission.depot_arrivee.code}",
+            styles['Normal']))
+
+        data = [["Référence", "Produit", "Qté envoyée", "Qté reçue"]]
+        for ligne in mission.lignes.select_related('produit'):
+            data.append([
+                ligne.produit.reference,
+                ligne.produit.nom,
+                str(ligne.quantite),
+                str(ligne.quantite_recue) if ligne.quantite_recue is not None else '—',
+            ])
+        t = Table(data, colWidths=[80, 200, 90, 90])
+        t.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.black),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ]))
+        elements.append(t)
+
+        if mission.signature_arrivee:
+            import base64
+            elements.append(Paragraph("Signature à l'arrivée :", styles['Normal']))
+            sig_data = mission.signature_arrivee
+            if sig_data.startswith('data:'):
+                sig_data = sig_data.split(',', 1)[-1]
+            sig_bytes = base64.b64decode(sig_data)
+            sig_buf = BytesIO(sig_bytes)
+            elements.append(Image(sig_buf, width=200, height=80))
+
+        doc.build(elements)
+        buffer.seek(0)
+        response = HttpResponse(buffer, content_type='application/pdf')
+        response['Content-Disposition'] = (
+            f'attachment; filename="bl-mission-{mission.numero}.pdf"')
+        return response
+
+
+# ── Maintenance ───────────────────────────────────────────────────────────────
+
+@extend_schema(tags=["Logistique — Maintenance"])
+class MaintenanceViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
+
+    serializer_class = MaintenanceSerializer
+
+    def get_permissions(self):
+        if self.action in ('list', 'retrieve'):
+            return [IsAuthenticated(), HasRole(LOG_READ)]
+        return [IsAuthenticated(), HasRole([Role.ADMIN, Role.SUPERVISEUR,
+                                            Role.MAINTENANCIER, Role.SUPERADMIN])]
+
+    def get_queryset(self):
+        qs = Maintenance.objects.select_related(
+            'vehicule', 'effectue_par'
+        ).order_by('-date_planifiee')
+        user = self.request.user
+        if not user.is_superadmin:
+            company = user.company
+            if not company:
+                return qs.none()
+            qs = qs.filter(vehicule__company=company)
+        vehicule = self.request.query_params.get('vehicule')
+        statut = self.request.query_params.get('statut')
+        if vehicule:
+            qs = qs.filter(vehicule_id=vehicule)
+        if statut:
+            qs = qs.filter(statut=statut)
+        return qs
+
+    def create(self, request, *args, **kwargs):
+        s = MaintenanceSerializer(data=request.data)
+        s.is_valid(raise_exception=True)
+        s.save()
+        return Response(s.data, status=status.HTTP_201_CREATED)
+
+    def partial_update(self, request, *args, **kwargs):
+        obj = self.get_object()
+        s = MaintenanceSerializer(obj, data=request.data, partial=True)
+        s.is_valid(raise_exception=True)
+        s.save()
+        return Response(s.data)
+
+
+# ── Pannes ────────────────────────────────────────────────────────────────────
+
+@extend_schema(tags=["Logistique — Pannes"])
+class PanneViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
+
+    serializer_class = PanneSerializer
+
+    def get_permissions(self):
+        return [IsAuthenticated(), HasRole(LOG_READ)]
+
+    def get_queryset(self):
+        qs = Panne.objects.select_related(
+            'vehicule', 'declare_par', 'mission'
+        ).order_by('-date_declaration')
+        user = self.request.user
+        if not user.is_superadmin:
+            company = user.company
+            if not company:
+                return qs.none()
+            qs = qs.filter(vehicule__company=company)
+        return qs
+
+    def create(self, request, *args, **kwargs):
+        s = PanneSerializer(data=request.data)
+        s.is_valid(raise_exception=True)
+        s.save(declare_par=request.user)
+        return Response(s.data, status=status.HTTP_201_CREATED)
+
+    @extend_schema(summary="Marquer une panne comme résolue")
+    @action(detail=True, methods=['post'], url_path='resoudre')
+    def resoudre(self, request, pk=None):
+        HasRole([Role.ADMIN, Role.SUPERVISEUR, Role.MAINTENANCIER,
+                 Role.SUPERADMIN]).has_permission(request, self)
+        panne = self.get_object()
+        if panne.statut == Panne.Statut.RESOLUE:
+            raise ValidationError("Cette panne est déjà résolue.")
+        cout = request.data.get('cout_reparation')
+        panne.statut = Panne.Statut.RESOLUE
+        panne.resolu_le = timezone.now()
+        if cout is not None:
+            panne.cout_reparation = cout
+        panne.save(update_fields=['statut', 'resolu_le', 'cout_reparation'])
+        if panne.vehicule.statut == Vehicule.Statut.HORS_SERVICE:
+            panne.vehicule.statut = Vehicule.Statut.DISPONIBLE
+            panne.vehicule.save(update_fields=['statut'])
+        return Response(PanneSerializer(panne).data)
+
+
+# ── Documents véhicule ────────────────────────────────────────────────────────
+
+@extend_schema(tags=["Logistique — Documents"])
+class DocumentVehiculeViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
+
+    serializer_class = DocumentVehiculeSerializer
+
+    def get_permissions(self):
+        if self.action in ('list', 'retrieve'):
+            return [IsAuthenticated(), HasRole(LOG_READ)]
+        return [IsAuthenticated(), HasRole(LOG_WRITE)]
+
+    def get_queryset(self):
+        qs = DocumentVehicule.objects.select_related(
+            'vehicule'
+        ).order_by('-created_at')
+        user = self.request.user
+        if not user.is_superadmin:
+            company = user.company
+            if not company:
+                return qs.none()
+            qs = qs.filter(vehicule__company=company)
+        vehicule = self.request.query_params.get('vehicule')
+        if vehicule:
+            qs = qs.filter(vehicule_id=vehicule)
+        return qs
+
+    def create(self, request, *args, **kwargs):
+        s = DocumentVehiculeSerializer(data=request.data)
+        s.is_valid(raise_exception=True)
+        s.save()
+        return Response(s.data, status=status.HTTP_201_CREATED)
+
+    def destroy(self, request, *args, **kwargs):
+        obj = self.get_object()
+        obj.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+# ── Consommation carburant ────────────────────────────────────────────────────
+@extend_schema(tags=["Logistique — Carburant"])
+class ConsommationCarburantViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
+    serializer_class = ConsommationCarburantSerializer
+    LOGI_ROLES = [Role.ADMIN, Role.SUPERVISEUR, Role.CHAUFFEUR, Role.MAINTENANCIER, Role.SUPERADMIN]
+
+    def get_permissions(self):
+        return [IsAuthenticated(), HasRole(self.LOGI_ROLES)]
+
+    def get_queryset(self):
+        qs = ConsommationCarburant.objects.select_related(
+            'vehicule', 'mission', 'enregistre_par'
+        ).order_by('-date_plein')
+        user = self.request.user
+        if not user.is_superadmin:
+            company = user.company
+            if not company:
+                return qs.none()
+            qs = qs.filter(vehicule__company=company)
+        vehicule = self.request.query_params.get('vehicule')
+        if vehicule:
+            qs = qs.filter(vehicule_id=vehicule)
+        return qs
+
+    def create(self, request, *args, **kwargs):
+        s = ConsommationCarburantSerializer(data=request.data)
+        s.is_valid(raise_exception=True)
+        obj = s.save(enregistre_par=request.user)
+        # Mettre à jour le kilométrage du véhicule si supérieur
+        vehicule = obj.vehicule
+        if obj.kilometrage > vehicule.kilometrage_actuel:
+            vehicule.kilometrage_actuel = obj.kilometrage
+            vehicule.save(update_fields=['kilometrage_actuel'])
+        return Response(ConsommationCarburantSerializer(obj).data, status=status.HTTP_201_CREATED)

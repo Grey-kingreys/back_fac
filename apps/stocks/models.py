@@ -107,6 +107,12 @@ class MouvementStock(models.Model):
         null=True, blank=True, related_name='mouvements',
         verbose_name=_("Transfert lié"),
     )
+    fournisseur = models.ForeignKey(
+        'produits.Fournisseur', on_delete=models.SET_NULL,
+        null=True, blank=True, related_name='mouvements_stock',
+        verbose_name=_("Fournisseur"),
+        help_text="Renseigné lors des entrées liées à une livraison fournisseur",
+    )
     utilisateur = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.PROTECT,
         related_name='mouvements_stock', verbose_name=_("Utilisateur"),
@@ -211,3 +217,142 @@ class LigneTransfert(models.Model):
 
     def __str__(self):
         return f"{self.produit.reference} x{self.quantite_envoyee}"
+
+
+# ── Inventaires physiques ─────────────────────────────────────────────────────
+class Inventaire(models.Model):
+    """Inventaire physique d'un dépôt — comptage réel vs théorique."""
+
+    class Statut(models.TextChoices):
+        EN_COURS = 'en_cours', _("En cours")
+        VALIDE = 'valide', _("Validé")
+        ANNULE = 'annule', _("Annulé")
+
+    company = models.ForeignKey(
+        'companies.Company', on_delete=models.CASCADE,
+        related_name='inventaires', verbose_name=_("Entreprise"),
+    )
+    depot = models.ForeignKey(
+        'companies.Depot', on_delete=models.PROTECT,
+        related_name='inventaires', verbose_name=_("Dépôt"),
+    )
+    statut = models.CharField(
+        _("Statut"), max_length=20, choices=Statut.choices, default=Statut.EN_COURS,
+    )
+    numero = models.CharField(_("Numéro"), max_length=30, unique=True)
+    notes = models.TextField(_("Notes"), blank=True)
+    cree_par = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.PROTECT,
+        related_name='inventaires_crees', verbose_name=_("Créé par"),
+    )
+    valide_par = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='inventaires_valides', verbose_name=_("Validé par"),
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    valide_le = models.DateTimeField(_("Validé le"), null=True, blank=True)
+
+    class Meta:
+        verbose_name = _("Inventaire")
+        verbose_name_plural = _("Inventaires")
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.numero} — {self.depot} ({self.get_statut_display()})"
+
+    def save(self, *args, **kwargs):
+        if not self.numero:
+            from django.utils import timezone as tz
+            count = Inventaire.objects.filter(company=self.company).count() + 1
+            self.numero = f"INV-{tz.now().strftime('%Y%m')}-{count:04d}"
+        super().save(*args, **kwargs)
+
+
+class LigneInventaire(models.Model):
+    """Ligne d'un inventaire : quantité théorique vs comptée."""
+    inventaire = models.ForeignKey(
+        Inventaire, on_delete=models.CASCADE,
+        related_name='lignes', verbose_name=_("Inventaire"),
+    )
+    produit = models.ForeignKey(
+        'produits.Produit', on_delete=models.PROTECT,
+        related_name='lignes_inventaire', verbose_name=_("Produit"),
+    )
+    quantite_theorique = models.DecimalField(
+        _("Quantité théorique"), max_digits=12, decimal_places=3,
+        help_text="Lue depuis StockDepot au moment de la création de l'inventaire",
+    )
+    quantite_comptee = models.DecimalField(
+        _("Quantité comptée"), max_digits=12, decimal_places=3,
+        null=True, blank=True,
+    )
+
+    class Meta:
+        verbose_name = _("Ligne d'inventaire")
+        verbose_name_plural = _("Lignes d'inventaire")
+        constraints = [
+            models.UniqueConstraint(
+                fields=['inventaire', 'produit'],
+                name='unique_ligne_inventaire_produit',
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.produit.reference} — {self.inventaire.numero}"
+
+    @property
+    def ecart(self):
+        if self.quantite_comptee is None:
+            return None
+        return self.quantite_comptee - self.quantite_theorique
+
+
+# ── Ajustements de stock ──────────────────────────────────────────────────────
+class AjustementStock(models.Model):
+    """Demande d'ajustement manuel de stock avec validation superviseur."""
+
+    class Statut(models.TextChoices):
+        EN_ATTENTE = 'en_attente', _("En attente")
+        APPROUVE = 'approuve', _("Approuvé")
+        REFUSE = 'refuse', _("Refusé")
+
+    company = models.ForeignKey(
+        'companies.Company', on_delete=models.CASCADE,
+        related_name='ajustements_stock', verbose_name=_("Entreprise"),
+    )
+    depot = models.ForeignKey(
+        'companies.Depot', on_delete=models.PROTECT,
+        related_name='ajustements_stock', verbose_name=_("Dépôt"),
+    )
+    produit = models.ForeignKey(
+        'produits.Produit', on_delete=models.PROTECT,
+        related_name='ajustements_stock', verbose_name=_("Produit"),
+    )
+    quantite = models.DecimalField(
+        _("Quantité"), max_digits=12, decimal_places=3,
+        help_text="Positif = ajout de stock, négatif = retrait",
+    )
+    motif = models.TextField(_("Motif"))
+    statut = models.CharField(
+        _("Statut"), max_length=20, choices=Statut.choices, default=Statut.EN_ATTENTE,
+    )
+    demande_par = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.PROTECT,
+        related_name='ajustements_demandes', verbose_name=_("Demandé par"),
+    )
+    traite_par = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='ajustements_traites', verbose_name=_("Traité par"),
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    traite_le = models.DateTimeField(_("Traité le"), null=True, blank=True)
+
+    class Meta:
+        verbose_name = _("Ajustement de stock")
+        verbose_name_plural = _("Ajustements de stock")
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"Ajust. {self.produit.reference} @{self.depot.code} : {self.quantite:+}"
