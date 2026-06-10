@@ -3,12 +3,16 @@
 
 set -e
 
+# Flags pilotés par .env (défauts = comportement PROD sûr)
+RUN_MAKEMIGRATIONS=${RUN_MAKEMIGRATIONS:-false}
+RUN_SEED_DEMO=${RUN_SEED_DEMO:-false}
+
 echo "========================================"
 echo " Gestion Intégrée Multi-Sites — Démarrage"
 echo "========================================"
 
 # ── 1. Attente PostgreSQL ─────────────────────────────────────────────
-echo "[1/4] Attente de PostgreSQL..."
+echo "[1] Attente de PostgreSQL..."
 until python -c "
 import psycopg, os, sys
 db_url = os.getenv('DATABASE_URL')
@@ -32,33 +36,37 @@ except Exception as e:
   sleep 2
 done
 
-# ── 2. Makemigrations ─────────────────────────────────────────────────
-echo "[2/4] Génération des migrations..."
-python manage.py makemigrations companies --no-input || echo "  [WARN] companies : pas de changement"
-python manage.py makemigrations accounts  --no-input || echo "  [WARN] accounts : pas de changement"
-# Ajouter ici les apps au fur et à mesure des releases
-# python manage.py makemigrations produits  --no-input || echo "  [WARN] produits : pas de changement"
+# ── 2. Makemigrations (LOCAL UNIQUEMENT) ──────────────────────────────
+if [ "$RUN_MAKEMIGRATIONS" = "true" ]; then
+  echo "[2] Génération des migrations (mode dev)..."
+  python manage.py makemigrations companies --no-input || echo "  [WARN] companies : pas de changement"
+  python manage.py makemigrations accounts  --no-input || echo "  [WARN] accounts : pas de changement"
+else
+  echo "[2] makemigrations ignoré (prod — migrations déjà commitées)"
+fi
 
-# ── 3. Migrate ────────────────────────────────────────────────────────
-echo "[3/4] Application des migrations..."
+# ── 3. Migrate (TOUJOURS) ─────────────────────────────────────────────
+echo "[3] Application des migrations..."
 python manage.py migrate --no-input
 
-# ── 4. Seed Super Admin ────────────────────────────────────────────────
-echo "[4/6] Création du super admin (si nécessaire)..."
+# ── 4. Seed Super Admin (idempotent, TOUJOURS) ────────────────────────
+echo "[4] Création du super admin (si nécessaire)..."
 python manage.py seed_superadmin || echo "  [INFO] Super admin déjà existant ou erreur"
 
-# ── 5. Seed données de démo ───────────────────────────────────────────
-echo "[5/6] Seed données de démo (entreprise, zones, dépôts, utilisateurs)..."
-python manage.py seed_demo_data || echo "  [WARN] Erreur lors du seed démo"
+# ── 5. Seed données de démo (LOCAL UNIQUEMENT) ────────────────────────
+if [ "$RUN_SEED_DEMO" = "true" ]; then
+  echo "[5] Seed données de démo (mode dev)..."
+  python manage.py seed_demo_data || echo "  [WARN] Erreur lors du seed démo"
+else
+  echo "[5] seed_demo_data ignoré (prod)"
+fi
 
-# ── 6. Collectstatic ─────────────────────────────────────────────────
-echo "[6/6] Collectstatic..."
+# ── 6. Collectstatic (TOUJOURS) ───────────────────────────────────────
+echo "[6] Collectstatic..."
 python manage.py collectstatic --no-input --clear
 
 echo "========================================"
 echo " Démarrage du serveur..."
-echo " URL : http://localhost:8001"
-echo " Swagger : http://localhost:8001/api/schema/docs/"
 echo "========================================"
 
 exec "$@"

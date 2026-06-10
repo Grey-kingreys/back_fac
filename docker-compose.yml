@@ -1,10 +1,12 @@
-# docker-compose.yml — Gestion Intégrée Multi-Sites (gestion_backend)
-# Stack complète : Django + PostgreSQL + Redis + LGTM (Loki, Grafana, Mimir, Tempo)
+# docker-compose.yml — Gestion Intégrée Multi-Sites (PRODUCTION)
+# Django (gunicorn) + PostgreSQL + Redis + Caddy (reverse proxy + HTTPS auto)
+# Stack LGTM (Loki, Grafana, Mimir, Tempo, Prometheus, cAdvisor) laissée
+# COMMENTÉE — à décommenter pour le build local / observabilité.
 #
 # PORTS — décalés pour coexister avec le projet restaurant sur la même machine :
 #   PostgreSQL  : 5433  (restaurant=5432)
 #   Redis       : 6380  (restaurant=6379)
-#   Backend     : 8001  (restaurant=8000)
+#   Backend     : 8001  (restaurant=8000)   [en prod : non exposé, servi via Caddy]
 #   Loki        : 3101  (restaurant=3100)
 #   Mimir       : 9010  (restaurant=9009)
 #   Prometheus  : 9091  (restaurant=9090)
@@ -14,10 +16,9 @@
 #   Tempo OTLP  : 4320  (restaurant=4318)
 #   Grafana     : 3001  (restaurant=3000)
 #
-# Usage dev :
-#   docker compose up --build
-#   docker compose exec backend python manage.py createsuperuser
-#   docker compose exec backend python manage.py loaddata companies users zones_depots
+# Usage local (observabilité) : décommenter l'ancre x-loki-logging + la stack LGTM
+# Usage prod  : docker compose up -d --build
+# Migrations / collectstatic : gérés par docker/entrypoint.sh (ENTRYPOINT du Dockerfile)
 
 # Ancre YAML — logging Loki pour tous les services
 # x-loki-logging: &loki-logging
@@ -29,7 +30,7 @@
 
 services:
 
-  # ── Base de données ───────────────────────────────────────────────────
+  # ── Base de données (privée, non exposée à Internet) ──────────────────
   db:
     image: postgres:16-alpine
     container_name: gestion_db
@@ -37,11 +38,11 @@ services:
     environment:
       POSTGRES_DB: ${DB_NAME:-gestion_multisites}
       POSTGRES_USER: ${DB_USER:-back_user}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-1234}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
     volumes:
       - gestion_postgres_data:/var/lib/postgresql/data
     ports:
-      - "5433:5432"
+      - "127.0.0.1:5433:5432"   # accessible uniquement en local (SSH tunnel pour debug)
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-back_user} -d ${DB_NAME:-gestion_multisites}"]
       interval: 10s
@@ -49,13 +50,13 @@ services:
       retries: 5
     # logging: *loki-logging
 
-  # ── Redis (blacklist JWT tokens) ──────────────────────────────────────
+  # ── Redis (privé, non exposé) ─────────────────────────────────────────
   redis:
     image: redis:7-alpine
     container_name: gestion_redis
     restart: unless-stopped
     ports:
-      - "6380:6379"
+      - "127.0.0.1:6380:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -63,12 +64,13 @@ services:
       retries: 5
     # logging: *loki-logging
 
-  # ── Backend Django ─────────────────────────────────────────────────────
+  # ── Backend Django (gunicorn — lancé par le Dockerfile) ───────────────
   backend:
     build:
       context: .
       dockerfile: Dockerfile
     container_name: gestion_backend
+    restart: unless-stopped
     env_file:
       - .env
     environment:
@@ -76,20 +78,19 @@ services:
       - DB_PORT=5432
       - DB_SSLMODE=disable
       - REDIS_URL=redis://redis:6379/0
-      - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4318
-      - OTEL_SERVICE_NAME=gestion-backend
+      # OTEL désactivé tant que la stack LGTM est commentée (décommenter pour local)
+      # - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4318
+      # - OTEL_SERVICE_NAME=gestion-backend
     volumes:
-      - .:/app
       - gestion_media_files:/app/media
       - gestion_static_files:/app/staticfiles
-    ports:
-      - "8001:8000"
+    expose:
+      - "8000"   # interne au réseau Docker, Caddy y accède — pas exposé à l'hôte
     depends_on:
       db:
         condition: service_healthy
       redis:
         condition: service_healthy
-    command: python manage.py runserver 0.0.0.0:8000
     # logging: *loki-logging
 
   # ── Loki — Agrégation des logs ────────────────────────────────────────
@@ -206,11 +207,32 @@ services:
   #     mimir:
   #       condition: service_healthy
 
+  # ── Caddy — reverse proxy + HTTPS automatique (Let's Encrypt) ─────────
+  caddy:
+    image: caddy:2-alpine
+    container_name: gestion_caddy
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - gestion_static_files:/srv/static:ro
+      - gestion_media_files:/srv/media:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - backend
+
 # Volumes nommés avec préfixe "gestion_" pour isoler du projet restaurant
 volumes:
   gestion_postgres_data:
   gestion_media_files:
   gestion_static_files:
+  caddy_data:
+  caddy_config:
   # gestion_loki_data:
   # gestion_grafana_data:
   # gestion_mimir_data:
