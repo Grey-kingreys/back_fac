@@ -25,6 +25,23 @@ SECRET_KEY = os.getenv("SECRET_KEY")
 DEBUG = os.getenv("DEBUG", "False") == "True"
 ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "localhost,127.0.0.1").split(",")
 
+# Derrière le reverse proxy Caddy (HTTPS terminé en amont) :
+# Django doit lire X-Forwarded-Proto pour savoir que la requête était en HTTPS.
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+
+# Origines de confiance pour la protection CSRF (login admin Django via HTTPS).
+# Rempli depuis .env : CSRF_TRUSTED_ORIGINS=https://gestion.kingreys.fr
+CSRF_TRUSTED_ORIGINS = [
+    o.strip()
+    for o in os.getenv("CSRF_TRUSTED_ORIGINS", "").split(",")
+    if o.strip()
+]
+
+# Cookies transmis uniquement via HTTPS en production
+if not DEBUG:
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+
 # ---------------------------------------------------------------------------
 # Applications installées
 # ---------------------------------------------------------------------------

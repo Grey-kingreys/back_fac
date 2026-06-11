@@ -1,0 +1,16 @@
+.env
+.env.*
+.git
+.gitignore
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.sqlite3
+media/
+staticfiles/
+docker-compose*.yml
+.dockerignore
+Dockerfile
+*.md
+EOF
