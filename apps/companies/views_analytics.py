@@ -18,15 +18,10 @@ from apps.accounts.models import Role
 from apps.accounts.permissions import HasRole
 
 
-ANALYTICS_ROLES = [Role.ADMIN, Role.SUPERVISEUR, Role.SUPERADMIN]
+ANALYTICS_ROLES = [Role.ADMIN, Role.SUPERVISEUR]
 
 
 def _get_company(request):
-    if request.user.is_superadmin:
-        company_id = request.query_params.get('company')
-        if company_id:
-            from apps.companies.models import Company
-            return Company.objects.filter(pk=company_id).first()
     return request.user.company
 
 

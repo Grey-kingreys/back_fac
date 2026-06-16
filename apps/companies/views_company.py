@@ -18,6 +18,8 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.accounts.models import Role
+
 from .models import Company
 from .serializers_company import (
     CompanyCreateSerializer,
@@ -66,7 +68,7 @@ class CompanyListCreateView(APIView):
         tags=["Companies"],
     )
     def get(self, request):
-        if request.user.role != 'superadmin':
+        if request.user.role != Role.SUPERADMIN:
             return error_response(
                 message="Accès réservé au Super Administrateur.",
                 status_code=status.HTTP_403_FORBIDDEN
@@ -108,7 +110,7 @@ class CompanyListCreateView(APIView):
         tags=["Companies"],
     )
     def post(self, request):
-        if request.user.role != 'superadmin':
+        if request.user.role != Role.SUPERADMIN:
             return error_response(
                 message="Accès réservé au Super Administrateur.",
                 status_code=status.HTTP_403_FORBIDDEN
@@ -142,10 +144,10 @@ class CompanyDetailView(APIView):
         """
         company = get_object_or_404(Company, pk=pk)
 
-        if request.user.role == 'superadmin':
+        if request.user.role == Role.SUPERADMIN:
             return company
 
-        if request.user.role == 'admin' and request.user.company == company:
+        if request.user.role == Role.ADMIN and request.user.company == company:
             return company
 
         return None
@@ -237,7 +239,7 @@ class CompanyToggleView(APIView):
         tags=["Companies"],
     )
     def post(self, request, pk):
-        if request.user.role != 'superadmin':
+        if request.user.role != Role.SUPERADMIN:
             return error_response(
                 message="Accès réservé au Super Administrateur.",
                 status_code=status.HTTP_403_FORBIDDEN

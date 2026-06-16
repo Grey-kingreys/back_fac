@@ -42,8 +42,14 @@ from .serializers import (
 )
 
 
-LOG_READ = [Role.ADMIN, Role.SUPERVISEUR, Role.CHAUFFEUR, Role.SUPERADMIN]
-LOG_WRITE = [Role.ADMIN, Role.SUPERVISEUR, Role.SUPERADMIN]
+# Lecture logistique : admin, superviseur, gestionnaire (voit missions de son dépôt), chauffeur, maintenancier
+LOG_READ = [Role.ADMIN, Role.SUPERVISEUR, Role.GESTIONNAIRE_STOCK, Role.CHAUFFEUR, Role.MAINTENANCIER]
+# Écriture véhicules : admin uniquement (configuration de la flotte)
+LOG_WRITE_VEHICLE = [Role.ADMIN]
+# Initiation mission : admin + gestionnaire (responsable du dépôt)
+LOG_WRITE_MISSION = [Role.ADMIN, Role.GESTIONNAIRE_STOCK]
+# Validation mission (terminer/annuler) : admin + superviseur
+LOG_VALIDATE_MISSION = [Role.ADMIN, Role.SUPERVISEUR]
 
 
 # ── Véhicules ─────────────────────────────────────────────────────────────────
@@ -58,7 +64,7 @@ class VehiculeViewSet(CompanyFilterMixin, GenericViewSet,
     def get_permissions(self):
         if self.action in ('list', 'retrieve'):
             return [IsAuthenticated(), HasRole(LOG_READ)]
-        return [IsAuthenticated(), HasRole(LOG_WRITE)]
+        return [IsAuthenticated(), HasRole(LOG_WRITE_VEHICLE)]
 
     def create(self, request, *args, **kwargs):
         s = VehiculeSerializer(data=request.data, context={'request': request})
@@ -100,13 +106,15 @@ class MissionViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
         ).prefetch_related('lignes__produit', 'positions').order_by('-created_at')
 
         user = self.request.user
-        if not user.is_superadmin:
-            company = user.company
-            if not company:
-                return qs.none()
-            qs = qs.filter(company=company)
-            if user.role == Role.CHAUFFEUR:
-                qs = qs.filter(chauffeur=user)
+        company = user.company
+        if not company:
+            return qs.none()
+        qs = qs.filter(company=company)
+        if user.role == Role.CHAUFFEUR:
+            qs = qs.filter(chauffeur=user)
+        elif user.role == Role.GESTIONNAIRE_STOCK and user.depot:
+            # Le gestionnaire voit les missions qui partent ou arrivent à son dépôt
+            qs = qs.filter(depot_depart=user.depot)
 
         statut = self.request.query_params.get('statut')
         vehicule = self.request.query_params.get('vehicule')
@@ -121,7 +129,8 @@ class MissionViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
 
     @extend_schema(summary="Créer une mission")
     def create(self, request, *args, **kwargs):
-        HasRole(LOG_WRITE).has_permission(request, self)
+        if not HasRole(LOG_WRITE_MISSION).has_permission(request, self):
+            raise PermissionDenied("Seul le gestionnaire ou l'admin peut initier une mission.")
         s = MissionCreateSerializer(data=request.data)
         s.is_valid(raise_exception=True)
         d = s.validated_data
@@ -189,7 +198,8 @@ class MissionViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
     @extend_schema(summary="Démarrer le chargement")
     @action(detail=True, methods=['post'], url_path='chargement')
     def chargement(self, request, pk=None):
-        HasRole(LOG_WRITE).has_permission(request, self)
+        if not HasRole(LOG_WRITE_MISSION).has_permission(request, self):
+            raise PermissionDenied("Seul le gestionnaire ou l'admin peut démarrer le chargement.")
         mission = self.get_object()
         if mission.statut != Mission.Statut.PLANIFIEE:
             raise ValidationError("La mission doit être à l'état Planifiée.")
@@ -251,10 +261,13 @@ class MissionViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
     @extend_schema(summary="Terminer la mission")
     @action(detail=True, methods=['post'], url_path='terminer')
     def terminer(self, request, pk=None):
-        HasRole(LOG_WRITE).has_permission(request, self)
+        if not HasRole(LOG_VALIDATE_MISSION).has_permission(request, self):
+            raise PermissionDenied("Seul le superviseur ou l'admin peut terminer une mission.")
         mission = self.get_object()
         if mission.statut not in (Mission.Statut.ARRIVEE, Mission.Statut.LITIGE):
             raise ValidationError("La mission doit être Arrivée ou en Litige pour être terminée.")
+        if mission.statut == Mission.Statut.ARRIVEE and not mission.signature_arrivee:
+            raise ValidationError("La signature de réception est obligatoire avant de terminer.")
         mission.statut = Mission.Statut.TERMINEE
         mission.save(update_fields=['statut'])
 
@@ -266,7 +279,8 @@ class MissionViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
     @extend_schema(summary="Annuler une mission")
     @action(detail=True, methods=['post'], url_path='annuler')
     def annuler(self, request, pk=None):
-        HasRole(LOG_WRITE).has_permission(request, self)
+        if not HasRole(LOG_VALIDATE_MISSION).has_permission(request, self):
+            raise PermissionDenied("Seul le superviseur ou l'admin peut annuler une mission.")
         mission = self.get_object()
         if mission.statut in (Mission.Statut.TERMINEE, Mission.Statut.ANNULEE):
             raise ValidationError("Impossible d'annuler cette mission.")
@@ -285,8 +299,8 @@ class MissionViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
         mission = self.get_object()
         if mission.statut != Mission.Statut.EN_TRANSIT:
             raise ValidationError("Positions GPS uniquement pour les missions en transit.")
-        if request.user != mission.chauffeur and not request.user.is_superadmin:
-            raise PermissionDenied("Seul le chauffeur peut envoyer sa position.")
+        if request.user != mission.chauffeur:
+            raise PermissionDenied("Seul le chauffeur assigné peut envoyer sa position.")
 
         s = PositionGPSSerializer(data=request.data)
         s.is_valid(raise_exception=True)
@@ -333,7 +347,7 @@ class MissionViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
             raise ValidationError(
                 f"La mission est en statut '{mission.get_statut_display()}', "
                 "seules les missions Planifiées peuvent être scannées.")
-        if request.user != mission.chauffeur and not request.user.is_superadmin:
+        if request.user != mission.chauffeur:
             raise PermissionDenied("Ce QR code ne correspond pas à votre mission.")
         mission.statut = Mission.Statut.CHARGEMENT
         mission.save(update_fields=['statut'])
@@ -414,19 +428,17 @@ class MaintenanceViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
     def get_permissions(self):
         if self.action in ('list', 'retrieve'):
             return [IsAuthenticated(), HasRole(LOG_READ)]
-        return [IsAuthenticated(), HasRole([Role.ADMIN, Role.SUPERVISEUR,
-                                            Role.MAINTENANCIER, Role.SUPERADMIN])]
+        return [IsAuthenticated(), HasRole([Role.ADMIN, Role.MAINTENANCIER])]
 
     def get_queryset(self):
         qs = Maintenance.objects.select_related(
             'vehicule', 'effectue_par'
         ).order_by('-date_planifiee')
         user = self.request.user
-        if not user.is_superadmin:
-            company = user.company
-            if not company:
-                return qs.none()
-            qs = qs.filter(vehicule__company=company)
+        company = user.company
+        if not company:
+            return qs.none()
+        qs = qs.filter(vehicule__company=company)
         vehicule = self.request.query_params.get('vehicule')
         statut = self.request.query_params.get('statut')
         if vehicule:
@@ -464,11 +476,10 @@ class PanneViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
             'vehicule', 'declare_par', 'mission'
         ).order_by('-date_declaration')
         user = self.request.user
-        if not user.is_superadmin:
-            company = user.company
-            if not company:
-                return qs.none()
-            qs = qs.filter(vehicule__company=company)
+        company = user.company
+        if not company:
+            return qs.none()
+        qs = qs.filter(vehicule__company=company)
         return qs
 
     def create(self, request, *args, **kwargs):
@@ -480,8 +491,8 @@ class PanneViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
     @extend_schema(summary="Marquer une panne comme résolue")
     @action(detail=True, methods=['post'], url_path='resoudre')
     def resoudre(self, request, pk=None):
-        HasRole([Role.ADMIN, Role.SUPERVISEUR, Role.MAINTENANCIER,
-                 Role.SUPERADMIN]).has_permission(request, self)
+        if not HasRole([Role.ADMIN, Role.SUPERVISEUR, Role.MAINTENANCIER]).has_permission(request, self):
+            raise PermissionDenied("Seul le maintenancier, superviseur ou admin peut résoudre une panne.")
         panne = self.get_object()
         if panne.statut == Panne.Statut.RESOLUE:
             raise ValidationError("Cette panne est déjà résolue.")
@@ -507,18 +518,17 @@ class DocumentVehiculeViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin
     def get_permissions(self):
         if self.action in ('list', 'retrieve'):
             return [IsAuthenticated(), HasRole(LOG_READ)]
-        return [IsAuthenticated(), HasRole(LOG_WRITE)]
+        return [IsAuthenticated(), HasRole([Role.ADMIN, Role.MAINTENANCIER])]
 
     def get_queryset(self):
         qs = DocumentVehicule.objects.select_related(
             'vehicule'
         ).order_by('-created_at')
         user = self.request.user
-        if not user.is_superadmin:
-            company = user.company
-            if not company:
-                return qs.none()
-            qs = qs.filter(vehicule__company=company)
+        company = user.company
+        if not company:
+            return qs.none()
+        qs = qs.filter(vehicule__company=company)
         vehicule = self.request.query_params.get('vehicule')
         if vehicule:
             qs = qs.filter(vehicule_id=vehicule)
@@ -540,7 +550,7 @@ class DocumentVehiculeViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin
 @extend_schema(tags=["Logistique — Carburant"])
 class ConsommationCarburantViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
     serializer_class = ConsommationCarburantSerializer
-    LOGI_ROLES = [Role.ADMIN, Role.SUPERVISEUR, Role.CHAUFFEUR, Role.MAINTENANCIER, Role.SUPERADMIN]
+    LOGI_ROLES = [Role.ADMIN, Role.CHAUFFEUR, Role.MAINTENANCIER]
 
     def get_permissions(self):
         return [IsAuthenticated(), HasRole(self.LOGI_ROLES)]
@@ -550,11 +560,10 @@ class ConsommationCarburantViewSet(GenericViewSet, ListModelMixin, RetrieveModel
             'vehicule', 'mission', 'enregistre_par'
         ).order_by('-date_plein')
         user = self.request.user
-        if not user.is_superadmin:
-            company = user.company
-            if not company:
-                return qs.none()
-            qs = qs.filter(vehicule__company=company)
+        company = user.company
+        if not company:
+            return qs.none()
+        qs = qs.filter(vehicule__company=company)
         vehicule = self.request.query_params.get('vehicule')
         if vehicule:
             qs = qs.filter(vehicule_id=vehicule)

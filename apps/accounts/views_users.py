@@ -55,11 +55,11 @@ class UserViewSet(CompanyFilterMixin, GenericViewSet, ListModelMixin, RetrieveMo
         - reset_password      : Admin uniquement
         """
         admin_only = [
-            HasRole([Role.ADMIN, Role.SUPERADMIN]),
+            HasRole([Role.ADMIN]),
             IsAuthenticated(),
         ]
         admin_or_supervisor = [
-            HasRole([Role.ADMIN, Role.SUPERVISEUR, Role.SUPERADMIN]),
+            HasRole([Role.ADMIN, Role.SUPERVISEUR]),
             IsAuthenticated(),
         ]
 

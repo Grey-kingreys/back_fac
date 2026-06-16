@@ -46,8 +46,8 @@ class CompanyWriteMixin:
     """Permissions : lecture large, écriture admin+."""
 
     READ_ROLES = [Role.ADMIN, Role.SUPERVISEUR, Role.GESTIONNAIRE_STOCK,
-                  Role.COMMERCIAL, Role.CAISSIER, Role.SUPERADMIN]
-    WRITE_ROLES = [Role.ADMIN, Role.SUPERADMIN]
+                  Role.COMMERCIAL, Role.CAISSIER]
+    WRITE_ROLES = [Role.ADMIN]
 
     def get_permissions(self):
         if self.action in ('list', 'retrieve', 'stock'):
@@ -294,8 +294,8 @@ class ProduitViewSet(CompanyWriteMixin, CompanyFilterMixin,
 @extend_schema(tags=["Fournisseurs — Commandes"])
 class CommandeFournisseurViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
 
-    ROLES = [Role.ADMIN, Role.SUPERVISEUR, Role.GESTIONNAIRE_STOCK, Role.SUPERADMIN]
-    WRITE_ROLES = [Role.ADMIN, Role.GESTIONNAIRE_STOCK, Role.SUPERADMIN]
+    ROLES = [Role.ADMIN, Role.SUPERVISEUR, Role.GESTIONNAIRE_STOCK]
+    WRITE_ROLES = [Role.ADMIN, Role.GESTIONNAIRE_STOCK]
 
     def get_permissions(self):
         if self.action in ('list', 'retrieve'):
@@ -312,10 +312,9 @@ class CommandeFournisseurViewSet(GenericViewSet, ListModelMixin, RetrieveModelMi
             'fournisseur', 'depot_destination', 'created_par'
         ).prefetch_related('lignes__produit').order_by('-created_at')
         user = self.request.user
-        if not user.is_superadmin:
-            if not user.company:
-                return qs.none()
-            qs = qs.filter(company=user.company)
+        if not user.company:
+            return qs.none()
+        qs = qs.filter(company=user.company)
         statut = self.request.query_params.get('statut')
         fournisseur = self.request.query_params.get('fournisseur')
         if statut:
@@ -395,17 +394,16 @@ class MouvementDetteFournisseurViewSet(GenericViewSet, ListModelMixin):
     serializer_class = MouvementDetteFournisseurSerializer
 
     def get_permissions(self):
-        return [IsAuthenticated(), HasRole([Role.ADMIN, Role.SUPERVISEUR, Role.SUPERADMIN])]
+        return [IsAuthenticated(), HasRole([Role.ADMIN, Role.SUPERVISEUR])]
 
     def get_queryset(self):
         qs = MouvementDetteFournisseur.objects.select_related(
             'fournisseur', 'created_par'
         ).order_by('-created_at')
         user = self.request.user
-        if not user.is_superadmin:
-            if not user.company:
-                return qs.none()
-            qs = qs.filter(fournisseur__company=user.company)
+        if not user.company:
+            return qs.none()
+        qs = qs.filter(fournisseur__company=user.company)
         fournisseur = self.request.query_params.get('fournisseur')
         if fournisseur:
             qs = qs.filter(fournisseur_id=fournisseur)
@@ -437,19 +435,18 @@ class EvaluationFournisseurViewSet(GenericViewSet, ListModelMixin, RetrieveModel
 
     def get_permissions(self):
         if self.action in ('list', 'retrieve'):
-            return [IsAuthenticated(), HasRole([Role.ADMIN, Role.SUPERVISEUR, Role.SUPERADMIN])]
-        return [IsAuthenticated(), HasRole([Role.ADMIN, Role.SUPERADMIN])]
+            return [IsAuthenticated(), HasRole([Role.ADMIN, Role.SUPERVISEUR])]
+        return [IsAuthenticated(), HasRole([Role.ADMIN])]
 
     def get_queryset(self):
         qs = EvaluationFournisseur.objects.select_related(
             'fournisseur', 'commande', 'evalue_par'
         ).order_by('-created_at')
         user = self.request.user
-        if not user.is_superadmin:
-            company = user.company
-            if not company:
-                return qs.none()
-            qs = qs.filter(fournisseur__company=company)
+        company = user.company
+        if not company:
+            return qs.none()
+        qs = qs.filter(fournisseur__company=company)
         fournisseur_id = self.request.query_params.get('fournisseur')
         if fournisseur_id:
             qs = qs.filter(fournisseur_id=fournisseur_id)

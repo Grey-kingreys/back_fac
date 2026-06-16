@@ -63,10 +63,6 @@ class HasRole(permissions.BasePermission):
         if not request.user or not request.user.is_authenticated:
             return False
 
-        # Le superadmin a tous les droits
-        if request.user.is_superadmin:
-            return True
-
         if not self.allowed_roles:
             return True
 
@@ -175,10 +171,6 @@ class BaseCompanyPermission(permissions.BasePermission):
         if not user or not user.is_authenticated:
             return False
 
-        # Superadmin a tous les droits
-        if user.is_superadmin:
-            return True
-
         # Vérifier le rôle si spécifié
         if self.allowed_roles and user.role not in self.allowed_roles:
             return False
@@ -192,10 +184,10 @@ class BaseCompanyPermission(permissions.BasePermission):
 
 # Classes de permission spécifiques pour faciliter l'utilisation
 class IsAdminOrSuperAdmin(BaseCompanyPermission):
-    """Permission pour les admins et superadmins."""
+    """Permission pour les admins uniquement (superadmin gère la plateforme, pas les données métier)."""
 
     def __init__(self):
-        super().__init__(allowed_roles=[Role.ADMIN, Role.SUPERADMIN])
+        super().__init__(allowed_roles=[Role.ADMIN])
 
 
 class IsSupervisorOrAbove(BaseCompanyPermission):
