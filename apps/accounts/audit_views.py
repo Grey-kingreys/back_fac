@@ -12,7 +12,8 @@ from rest_framework.permissions import IsAuthenticated
 
 from .audit_models import AuditLog, LoginLog
 from .audit_serializers import AuditLogSerializer, LoginLogSerializer
-from .permissions import IsAdminOrSuperAdmin
+from .models import Role
+from .permissions import HasRole
 
 
 class AuditLogListView(ListAPIView):
@@ -27,7 +28,7 @@ class AuditLogListView(ListAPIView):
       ?user_id=<id>
     """
     serializer_class = AuditLogSerializer
-    permission_classes = [IsAuthenticated, IsAdminOrSuperAdmin]
+    permission_classes = [IsAuthenticated, HasRole([Role.ADMIN, Role.SUPERADMIN])]
 
     @extend_schema(
         summary="Journal d'audit",
@@ -82,7 +83,7 @@ class LoginLogListView(ListAPIView):
       ?success=true|false
     """
     serializer_class = LoginLogSerializer
-    permission_classes = [IsAuthenticated, IsAdminOrSuperAdmin]
+    permission_classes = [IsAuthenticated, HasRole([Role.ADMIN, Role.SUPERADMIN])]
 
     @extend_schema(
         summary="Journal de connexion",

@@ -53,12 +53,14 @@ class CompanyObjectMixin:
     """
 
     def get_permissions(self):
+        # Lecture : admin, superviseur, gestionnaire (ont besoin de voir zones/dépôts)
         read_perms = [
-            HasRole([Role.ADMIN, Role.SUPERVISEUR, Role.SUPERADMIN]),
+            HasRole([Role.ADMIN, Role.SUPERVISEUR, Role.GESTIONNAIRE_STOCK]),
             IsAuthenticated(),
         ]
+        # Écriture : admin uniquement (configuration de l'infrastructure)
         write_perms = [
-            HasRole([Role.ADMIN, Role.SUPERADMIN]),
+            HasRole([Role.ADMIN]),
             IsAuthenticated(),
         ]
         if self.action in ('list', 'retrieve', 'dashboard'):
@@ -211,11 +213,13 @@ class DepotViewSet(CompanyObjectMixin, CompanyFilterMixin, GenericViewSet, ListM
         qs = Depot.objects.select_related('zone', 'zone__company').order_by('zone__name', 'name')
         user = self.request.user
 
-        if not user.is_superadmin:
-            company = user.company
-            if not company:
-                return qs.none()
-            qs = qs.filter(zone__company=company)
+        if user.is_superadmin:
+            return qs
+
+        company = user.company
+        if not company:
+            return qs.none()
+        qs = qs.filter(zone__company=company)
 
         # Filtres query params
         zone = self.request.query_params.get('zone')

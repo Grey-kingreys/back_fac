@@ -59,8 +59,8 @@ def _check_company(request, view, obj):
 
 
 class VenteWriteMixin:
-    READ_ROLES = [Role.ADMIN, Role.SUPERVISEUR, Role.CAISSIER, Role.COMMERCIAL, Role.SUPERADMIN]
-    WRITE_ROLES = [Role.ADMIN, Role.CAISSIER, Role.SUPERADMIN]
+    READ_ROLES = [Role.ADMIN, Role.SUPERVISEUR, Role.CAISSIER, Role.COMMERCIAL]
+    WRITE_ROLES = [Role.ADMIN, Role.CAISSIER]
 
     def get_permissions(self):
         if self.action in ('list', 'retrieve'):
@@ -74,7 +74,7 @@ class VenteWriteMixin:
 class ParametresFideliteView(APIView):
 
     def get_permissions(self):
-        return [IsAuthenticated(), HasRole([Role.ADMIN, Role.SUPERADMIN])]
+        return [IsAuthenticated(), HasRole([Role.ADMIN])]
 
     @extend_schema(summary="Lire les paramètres fidélité de l'entreprise", responses={200: ParametresFideliteSerializer})
     def get(self, request):
@@ -173,7 +173,8 @@ class ClientViewSet(VenteWriteMixin, CompanyFilterMixin, GenericViewSet,
 @extend_schema(tags=["Ventes — Commandes"])
 class CommandeViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
 
-    VENTE_ROLES = [Role.ADMIN, Role.SUPERVISEUR, Role.CAISSIER, Role.SUPERADMIN]
+    # Commercial crée les commandes ; caissier encaisse au comptoir ; admin supervise
+    VENTE_ROLES = [Role.ADMIN, Role.CAISSIER, Role.COMMERCIAL]
 
     def get_permissions(self):
         return [IsAuthenticated(), HasRole(self.VENTE_ROLES)]
@@ -187,11 +188,10 @@ class CommandeViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
         ).prefetch_related('lignes__produit', 'paiements').order_by('-created_at')
 
         user = self.request.user
-        if not user.is_superadmin:
-            company = user.company
-            if not company:
-                return qs.none()
-            qs = qs.filter(company=company)
+        company = user.company
+        if not company:
+            return qs.none()
+        qs = qs.filter(company=company)
 
         depot = self.request.query_params.get('depot')
         statut = self.request.query_params.get('statut')
@@ -227,7 +227,7 @@ class CommandeViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
         except Depot.DoesNotExist:
             raise ValidationError({'depot': "Dépôt introuvable ou inactif."})
 
-        if not request.user.is_superadmin and depot.zone.company != company:
+        if depot.zone.company != company:
             raise PermissionDenied("Ce dépôt n'appartient pas à votre entreprise.")
 
         client = None
@@ -397,9 +397,8 @@ class CommandeViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
 @extend_schema(tags=["Ventes — Devis"])
 class DevisViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
 
-    DEVIS_READ_ROLES = [Role.ADMIN, Role.SUPERVISEUR, Role.COMMERCIAL, Role.CAISSIER,
-                        Role.SUPERADMIN]
-    DEVIS_WRITE_ROLES = [Role.ADMIN, Role.COMMERCIAL, Role.CAISSIER, Role.SUPERADMIN]
+    DEVIS_READ_ROLES = [Role.ADMIN, Role.SUPERVISEUR, Role.COMMERCIAL, Role.CAISSIER]
+    DEVIS_WRITE_ROLES = [Role.ADMIN, Role.COMMERCIAL, Role.CAISSIER]
 
     def get_permissions(self):
         if self.action in ('list', 'retrieve'):
@@ -414,11 +413,10 @@ class DevisViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
             'company', 'depot', 'client', 'cree_par'
         ).prefetch_related('lignes__produit').order_by('-created_at')
         user = self.request.user
-        if not user.is_superadmin:
-            company = user.company
-            if not company:
-                return qs.none()
-            qs = qs.filter(company=company)
+        company = user.company
+        if not company:
+            return qs.none()
+        qs = qs.filter(company=company)
         statut = self.request.query_params.get('statut')
         if statut:
             qs = qs.filter(statut=statut)
@@ -433,7 +431,7 @@ class DevisViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
         if not company:
             raise ValidationError("Pas d'entreprise associée.")
         depot = d['depot']
-        if not request.user.is_superadmin and depot.zone.company != company:
+        if depot.zone.company != company:
             raise PermissionDenied("Ce dépôt n'appartient pas à votre entreprise.")
         client = d.get('client')
         if client and client.company != company:
@@ -501,7 +499,7 @@ class DevisViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
 @extend_schema(tags=["Ventes — Retours"])
 class RetourCommandeViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
 
-    RETOUR_ROLES = [Role.ADMIN, Role.SUPERVISEUR, Role.CAISSIER, Role.SUPERADMIN]
+    RETOUR_ROLES = [Role.ADMIN, Role.SUPERVISEUR, Role.CAISSIER]
 
     def get_permissions(self):
         return [IsAuthenticated(), HasRole(self.RETOUR_ROLES)]
@@ -514,11 +512,10 @@ class RetourCommandeViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
             'commande__company', 'traite_par'
         ).prefetch_related('lignes__produit').order_by('-created_at')
         user = self.request.user
-        if not user.is_superadmin:
-            company = user.company
-            if not company:
-                return qs.none()
-            qs = qs.filter(commande__company=company)
+        company = user.company
+        if not company:
+            return qs.none()
+        qs = qs.filter(commande__company=company)
         return qs
 
     @extend_schema(summary="Créer un retour commande")
@@ -528,7 +525,7 @@ class RetourCommandeViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
         d = s.validated_data
         commande = d['commande']
         company = request.user.company
-        if not request.user.is_superadmin and commande.company != company:
+        if commande.company != company:
             raise PermissionDenied("Cette commande n'appartient pas à votre entreprise.")
 
         with transaction.atomic():
@@ -563,7 +560,7 @@ class HistoriquePointsViewSet(GenericViewSet, ListModelMixin):
 
     def get_permissions(self):
         return [IsAuthenticated(), HasRole([Role.ADMIN, Role.SUPERVISEUR,
-                                            Role.CAISSIER, Role.SUPERADMIN])]
+                                            Role.CAISSIER, Role.COMMERCIAL])]
 
     def get_serializer_class(self):
         return HistoriquePointsSerializer
@@ -571,11 +568,10 @@ class HistoriquePointsViewSet(GenericViewSet, ListModelMixin):
     def get_queryset(self):
         qs = HistoriquePoints.objects.select_related('client', 'commande').order_by('-created_at')
         user = self.request.user
-        if not user.is_superadmin:
-            company = user.company
-            if not company:
-                return qs.none()
-            qs = qs.filter(client__company=company)
+        company = user.company
+        if not company:
+            return qs.none()
+        qs = qs.filter(client__company=company)
         client_id = self.request.query_params.get('client')
         if client_id:
             qs = qs.filter(client_id=client_id)
@@ -589,6 +585,8 @@ class PromotionViewSet(VenteWriteMixin, CompanyFilterMixin, GenericViewSet,
     """CRUD promotions et remises commerciales."""
     serializer_class = PromotionSerializer
     queryset = Promotion.objects.order_by('-date_debut')
+    # Les promotions sont créées/modifiées par l'admin uniquement (décision commerciale)
+    WRITE_ROLES = [Role.ADMIN]
 
     def get_queryset(self):
         qs = super().get_queryset()

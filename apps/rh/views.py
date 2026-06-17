@@ -27,8 +27,8 @@ from .serializers import (
 )
 
 
-RH_READ = [Role.ADMIN, Role.SUPERVISEUR, Role.SUPERADMIN]
-RH_WRITE = [Role.ADMIN, Role.SUPERADMIN]
+RH_READ = [Role.ADMIN, Role.SUPERVISEUR]
+RH_WRITE = [Role.ADMIN]
 
 
 # ── Employés ──────────────────────────────────────────────────────────────────
@@ -125,11 +125,10 @@ class PresenceViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
     def get_queryset(self):
         qs = Presence.objects.select_related('employe', 'enregistre_par').order_by('-date')
         user = self.request.user
-        if not user.is_superadmin:
-            company = user.company
-            if not company:
-                return qs.none()
-            qs = qs.filter(employe__company=company)
+        company = user.company
+        if not company:
+            return qs.none()
+        qs = qs.filter(employe__company=company)
         employe = self.request.query_params.get('employe')
         date = self.request.query_params.get('date')
         if employe:
@@ -168,11 +167,10 @@ class CongeViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
     def get_queryset(self):
         qs = Conge.objects.select_related('employe', 'approuve_par').order_by('-date_debut')
         user = self.request.user
-        if not user.is_superadmin:
-            company = user.company
-            if not company:
-                return qs.none()
-            qs = qs.filter(employe__company=company)
+        company = user.company
+        if not company:
+            return qs.none()
+        qs = qs.filter(employe__company=company)
         statut = self.request.query_params.get('statut')
         if statut:
             qs = qs.filter(statut=statut)

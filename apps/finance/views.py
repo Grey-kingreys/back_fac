@@ -49,8 +49,8 @@ from .serializers import (
 )
 
 
-FINANCE_READ = [Role.ADMIN, Role.SUPERVISEUR, Role.CAISSIER, Role.SUPERADMIN]
-FINANCE_WRITE = [Role.ADMIN, Role.SUPERADMIN]
+FINANCE_READ = [Role.ADMIN, Role.SUPERVISEUR, Role.CAISSIER]
+FINANCE_WRITE = [Role.ADMIN]
 
 
 # ── Taux de change ────────────────────────────────────────────────────────────
@@ -112,11 +112,10 @@ class SessionCaisseViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
         ).prefetch_related('transactions').order_by('-ouvert_le')
 
         user = self.request.user
-        if not user.is_superadmin:
-            company = user.company
-            if not company:
-                return qs.none()
-            qs = qs.filter(caisse__company=company)
+        company = user.company
+        if not company:
+            return qs.none()
+        qs = qs.filter(caisse__company=company)
 
         caisse = self.request.query_params.get('caisse')
         statut = self.request.query_params.get('statut')
@@ -326,8 +325,6 @@ class CaisseEntrepriseViewSet(GenericViewSet, RetrieveModelMixin):
 
     def get_queryset(self):
         user = self.request.user
-        if user.is_superadmin:
-            return CaisseEntreprise.objects.all()
         return CaisseEntreprise.objects.filter(company=user.company)
 
     @extend_schema(summary="Caisse entreprise de la company connectée")
@@ -358,14 +355,13 @@ class VersementCaisseViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin)
             'caisse_dest_zone', 'caisse_dest_entreprise',
         ).order_by('-created_at')
         user = self.request.user
-        if not user.is_superadmin:
-            company = user.company
-            if not company:
-                return qs.none()
-            qs = qs.filter(
-                models.Q(caisse_source_depot__company=company) |
-                models.Q(caisse_source_zone__company=company)
-            )
+        company = user.company
+        if not company:
+            return qs.none()
+        qs = qs.filter(
+            models.Q(caisse_source_depot__company=company) |
+            models.Q(caisse_source_zone__company=company)
+        )
         return qs
 
     def create(self, request, *args, **kwargs):
@@ -416,11 +412,10 @@ class DepenseOperationnelleViewSet(GenericViewSet, ListModelMixin, RetrieveModel
             'company', 'depot', 'enregistre_par'
         ).order_by('-date_depense')
         user = self.request.user
-        if not user.is_superadmin:
-            company = user.company
-            if not company:
-                return qs.none()
-            qs = qs.filter(company=company)
+        company = user.company
+        if not company:
+            return qs.none()
+        qs = qs.filter(company=company)
         categorie = self.request.query_params.get('categorie')
         depot = self.request.query_params.get('depot')
         date_debut = self.request.query_params.get('date_debut')
@@ -468,19 +463,14 @@ class ConsolidationCaissesView(APIView):
     @extend_schema(summary="Soldes consolidés — tous niveaux de caisses", responses={200: OpenApiTypes.OBJECT})
     def get(self, request):
         company = request.user.company
-        if not company and not request.user.is_superadmin:
+        if not company:
             return Response({'detail': "Pas d'entreprise associée."}, status=400)
 
         from django.db.models import Sum
 
-        if request.user.is_superadmin:
-            caisses_depot = CaissePhysique.objects.all()
-            caisses_zone = CaisseZone.objects.all()
-            caisse_ent = CaisseEntreprise.objects.all()
-        else:
-            caisses_depot = CaissePhysique.objects.filter(company=company)
-            caisses_zone = CaisseZone.objects.filter(company=company)
-            caisse_ent = CaisseEntreprise.objects.filter(company=company)
+        caisses_depot = CaissePhysique.objects.filter(company=company)
+        caisses_zone = CaisseZone.objects.filter(company=company)
+        caisse_ent = CaisseEntreprise.objects.filter(company=company)
 
         return Response({
             'caisse_entreprise': [
