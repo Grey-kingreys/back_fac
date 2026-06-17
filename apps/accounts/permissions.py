@@ -66,9 +66,8 @@ class HasRole(permissions.BasePermission):
         if not self.allowed_roles:
             return True
 
-        if request.user.is_superadmin:
-            return True
-
+        # Pas de bypass superadmin : il doit être explicitement dans allowed_roles
+        # ou bloqué par IsSuperAdminBlocked sur les endpoints opérationnels.
         return request.user.role in self.allowed_roles
 
 
@@ -189,6 +188,22 @@ class BaseCompanyPermission(permissions.BasePermission):
 
 
 # Classes de permission spécifiques pour faciliter l'utilisation
+
+
+class IsSuperAdminBlocked(permissions.BasePermission):
+    """
+    Bloque le superadmin des endpoints opérationnels des entreprises.
+    Le superadmin gère la plateforme (companies, facturation, dashboard agrégé),
+    pas les données métier internes (zones, dépôts, utilisateurs opérationnels).
+    """
+    message = "Le super-administrateur n'a pas accès aux opérations internes des entreprises."
+
+    def has_permission(self, request: Request, view: View) -> bool:
+        if request.user and request.user.is_authenticated and request.user.is_superadmin:
+            return False
+        return True
+
+
 class IsAdminOrSuperAdmin(BaseCompanyPermission):
     """Permission pour les admins uniquement (superadmin gère la plateforme, pas les données métier)."""
 

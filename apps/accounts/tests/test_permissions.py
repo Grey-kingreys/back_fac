@@ -99,10 +99,11 @@ class TestHasRole:
         req = make_request(commercial_a)
         assert perm.has_permission(req, None) is False
 
-    def test_superadmin_bypass_tous_roles(self, superadmin):
+    def test_superadmin_bloque_si_role_absent(self, superadmin):
+        # HasRole ne bypass plus le superadmin : il doit être dans allowed_roles.
         perm = HasRole([Role.ADMIN])
         req = make_request(superadmin)
-        assert perm.has_permission(req, None) is True
+        assert perm.has_permission(req, None) is False
 
     def test_liste_vide_autorise_tous_authentifies(self, commercial_a):
         perm = HasRole([])

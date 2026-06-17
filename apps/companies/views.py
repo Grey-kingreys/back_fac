@@ -28,7 +28,7 @@ from rest_framework.response import Response
 from rest_framework.viewsets import GenericViewSet
 
 from apps.accounts.models import Role
-from apps.accounts.permissions import CompanyFilterMixin, HasRole, IsCompanyMember
+from apps.accounts.permissions import CompanyFilterMixin, HasRole, IsCompanyMember, IsSuperAdminBlocked
 
 from .models import Depot, Zone
 from .serializers import (
@@ -55,11 +55,13 @@ class CompanyObjectMixin:
     def get_permissions(self):
         # Lecture : admin, superviseur, gestionnaire (ont besoin de voir zones/dépôts)
         read_perms = [
+            IsSuperAdminBlocked(),
             HasRole([Role.ADMIN, Role.SUPERVISEUR, Role.GESTIONNAIRE_STOCK]),
             IsAuthenticated(),
         ]
         # Écriture : admin uniquement (configuration de l'infrastructure)
         write_perms = [
+            IsSuperAdminBlocked(),
             HasRole([Role.ADMIN]),
             IsAuthenticated(),
         ]

@@ -207,14 +207,14 @@ class HasRoleTest(TestCase):
         result = permission.has_permission(request, None)
         self.assertFalse(result)
 
-    def test_superadmin_can_access_any_role(self):
-        """Le superadmin peut accéder même si son rôle n'est pas dans la liste."""
+    def test_superadmin_bloque_si_role_absent(self):
+        """HasRole ne bypass plus le superadmin : il doit être dans allowed_roles."""
         permission = HasRole([Role.ADMIN, Role.SUPERVISEUR])
         request = self.factory.get('/')
         request.user = self.superadmin
 
         result = permission.has_permission(request, None)
-        self.assertTrue(result)
+        self.assertFalse(result)
 
     def test_unauthenticated_user_cannot_access(self):
         """Un utilisateur non authentifié ne peut pas accéder."""

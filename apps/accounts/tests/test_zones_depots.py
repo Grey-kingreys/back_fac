@@ -52,12 +52,10 @@ class TestZoneList:
         res = anon_client.get(ZONES_URL)
         assert res.status_code == status.HTTP_401_UNAUTHORIZED
 
-    def test_superadmin_voit_toutes_les_zones(self, client_superadmin, zone_a, zone_b):
+    def test_superadmin_refuse_zones(self, client_superadmin, zone_a, zone_b):
+        # Le superadmin gère la plateforme, pas les opérations internes des entreprises.
         res = client_superadmin.get(ZONES_URL)
-        assert res.status_code == status.HTTP_200_OK
-        ids = [z["id"] for z in res.data["results"]]
-        assert zone_a.id in ids
-        assert zone_b.id in ids
+        assert res.status_code == status.HTTP_403_FORBIDDEN
 
     def test_filtre_is_active(self, client_admin_a, company_a):
         inactive = Zone.objects.create(company=company_a, name="Zone Inactive", code="ZI", is_active=False)
@@ -238,11 +236,10 @@ class TestDepotList:
         res = client_commercial_a.get(DEPOTS_URL)
         assert res.status_code == status.HTTP_403_FORBIDDEN
 
-    def test_superadmin_voit_tous_depots(self, client_superadmin, depot_a, depot_b):
+    def test_superadmin_refuse_depots(self, client_superadmin, depot_a, depot_b):
+        # Le superadmin gère la plateforme, pas les opérations internes des entreprises.
         res = client_superadmin.get(DEPOTS_URL)
-        ids = [d["id"] for d in res.data["results"]]
-        assert depot_a.id in ids
-        assert depot_b.id in ids
+        assert res.status_code == status.HTTP_403_FORBIDDEN
 
 
 # ─────────────────────────────────────────────────────────────────────────────
