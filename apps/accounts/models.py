@@ -128,6 +128,25 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
         )
     )
 
+    # ── 2FA ───────────────────────────────────────────────────────────────────
+    two_factor_enabled = models.BooleanField(
+        default=False,
+        verbose_name="2FA activée",
+    )
+    two_factor_method = models.CharField(
+        max_length=10,
+        blank=True,
+        default='',
+        verbose_name="Méthode 2FA",
+        help_text="'totp' (app Authy/Authenticator) ou 'email' (code par email).",
+    )
+    totp_secret = models.CharField(
+        max_length=64,
+        blank=True,
+        default='',
+        verbose_name="Secret TOTP",
+    )
+
     # ── Flags Django ──────────────────────────────────────────────────────────
     is_active = models.BooleanField(default=True, verbose_name="Actif")
     is_staff = models.BooleanField(default=False, verbose_name="Staff admin")

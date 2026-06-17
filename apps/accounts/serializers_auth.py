@@ -64,6 +64,8 @@ class MeSerializer(serializers.ModelSerializer):
             "depot_id",
             "depot_name",
             "avatar_url",
+            "two_factor_enabled",
+            "two_factor_method",
         ]
         read_only_fields = fields
 

@@ -67,8 +67,8 @@ class MissionListSerializer(serializers.ModelSerializer):
         source='vehicule.immatriculation', read_only=True)
     chauffeur_nom = serializers.CharField(
         source='chauffeur.get_full_name', read_only=True)
-    depot_depart_nom = serializers.CharField(source='depot_depart.nom', read_only=True)
-    depot_arrivee_nom = serializers.CharField(source='depot_arrivee.nom', read_only=True)
+    depot_depart_nom = serializers.CharField(source='depot_depart.name', read_only=True)
+    depot_arrivee_nom = serializers.CharField(source='depot_arrivee.name', read_only=True)
 
     class Meta:
         model = Mission
@@ -90,8 +90,8 @@ class MissionDetailSerializer(serializers.ModelSerializer):
         source='vehicule.immatriculation', read_only=True)
     chauffeur_nom = serializers.CharField(
         source='chauffeur.get_full_name', read_only=True)
-    depot_depart_nom = serializers.CharField(source='depot_depart.nom', read_only=True)
-    depot_arrivee_nom = serializers.CharField(source='depot_arrivee.nom', read_only=True)
+    depot_depart_nom = serializers.CharField(source='depot_depart.name', read_only=True)
+    depot_arrivee_nom = serializers.CharField(source='depot_arrivee.name', read_only=True)
     lignes = LigneMissionSerializer(many=True, read_only=True)
     derniere_position = serializers.SerializerMethodField()
 

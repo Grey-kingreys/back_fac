@@ -6,6 +6,13 @@ URLs d'authentification.
 
 from django.urls import path
 
+from .views_2fa import (
+    TwoFactorDisableView,
+    TwoFactorLoginVerifyView,
+    TwoFactorResendView,
+    TwoFactorSetupVerifyView,
+    TwoFactorSetupView,
+)
 from .views_auth import (
     ChangePasswordView,
     LoginView,
@@ -31,7 +38,14 @@ urlpatterns = [
     path('password-reset/confirm/', PasswordResetConfirmView.as_view(), name='auth-password-reset-confirm'),
 
     # ── Première connexion Admin (créé par SuperAdmin) ─────────────────────
-    # GET  /api/auth/first-login/?token=<uuid>  — vérifier le token
-    # POST /api/auth/first-login/               — définir le mot de passe
     path('first-login/', FirstLoginView.as_view(), name='auth-first-login'),
+
+    # ── 2FA ────────────────────────────────────────────────────────────────
+    # Configuration (utilisateur connecté)
+    path('2fa/setup/', TwoFactorSetupView.as_view(), name='auth-2fa-setup'),
+    path('2fa/setup-verify/', TwoFactorSetupVerifyView.as_view(), name='auth-2fa-setup-verify'),
+    path('2fa/disable/', TwoFactorDisableView.as_view(), name='auth-2fa-disable'),
+    # Vérification lors du login (AllowAny)
+    path('2fa/login-verify/', TwoFactorLoginVerifyView.as_view(), name='auth-2fa-login-verify'),
+    path('2fa/resend/', TwoFactorResendView.as_view(), name='auth-2fa-resend'),
 ]

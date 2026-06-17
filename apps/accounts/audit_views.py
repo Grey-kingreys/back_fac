@@ -53,6 +53,8 @@ class AuditLogListView(ListAPIView):
         # Isolation company : le SuperAdmin voit tout, l'Admin voit
         # uniquement les logs de sa company (via les user_id de sa company)
         user = self.request.user
+        if not user.is_authenticated:
+            return qs.none()
         if not user.is_superadmin:
             company_user_ids = user.company.users.values_list('id', flat=True)
             qs = qs.filter(user_id__in=company_user_ids)
@@ -105,6 +107,8 @@ class LoginLogListView(ListAPIView):
         qs = LoginLog.objects.select_related('user').order_by('-timestamp')
 
         user = self.request.user
+        if not user.is_authenticated:
+            return qs.none()
         if not user.is_superadmin:
             company_user_ids = user.company.users.values_list('id', flat=True)
             # Inclut aussi les tentatives avec user=None (email inconnu)

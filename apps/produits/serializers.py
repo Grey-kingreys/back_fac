@@ -193,7 +193,7 @@ class CommandeFournisseurListSerializer(serializers.ModelSerializer):
 class CommandeFournisseurDetailSerializer(serializers.ModelSerializer):
     fournisseur_nom = serializers.CharField(source='fournisseur.nom', read_only=True)
     statut_label = serializers.CharField(source='get_statut_display', read_only=True)
-    depot_nom = serializers.CharField(source='depot_destination.nom', read_only=True)
+    depot_nom = serializers.CharField(source='depot_destination.name', read_only=True)
     lignes = LigneCommandeFournisseurSerializer(many=True, read_only=True)
 
     class Meta:
