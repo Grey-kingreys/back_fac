@@ -212,6 +212,10 @@ class DepotViewSet(CompanyObjectMixin, CompanyFilterMixin, GenericViewSet, ListM
         """
         qs = Depot.objects.select_related('zone', 'zone__company').order_by('zone__name', 'name')
         user = self.request.user
+
+        if user.is_superadmin:
+            return qs
+
         company = user.company
         if not company:
             return qs.none()

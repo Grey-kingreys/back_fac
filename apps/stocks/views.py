@@ -323,7 +323,7 @@ class InventaireViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
 
     ROLES = [Role.ADMIN, Role.SUPERVISEUR, Role.GESTIONNAIRE_STOCK]
     WRITE_ROLES = [Role.ADMIN, Role.SUPERVISEUR]
-    CREATE_ROLES = [Role.ADMIN, Role.GESTIONNAIRE_STOCK]
+    CREATE_ROLES = [Role.ADMIN, Role.SUPERVISEUR]
 
     def get_permissions(self):
         return [IsAuthenticated(), HasRole(self.ROLES)]

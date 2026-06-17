@@ -66,6 +66,9 @@ class HasRole(permissions.BasePermission):
         if not self.allowed_roles:
             return True
 
+        if request.user.is_superadmin:
+            return True
+
         return request.user.role in self.allowed_roles
 
 
@@ -170,6 +173,9 @@ class BaseCompanyPermission(permissions.BasePermission):
 
         if not user or not user.is_authenticated:
             return False
+
+        if user.is_superadmin:
+            return True
 
         # Vérifier le rôle si spécifié
         if self.allowed_roles and user.role not in self.allowed_roles:

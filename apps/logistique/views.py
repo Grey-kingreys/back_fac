@@ -46,8 +46,8 @@ from .serializers import (
 LOG_READ = [Role.ADMIN, Role.SUPERVISEUR, Role.GESTIONNAIRE_STOCK, Role.CHAUFFEUR, Role.MAINTENANCIER]
 # Écriture véhicules : admin uniquement (configuration de la flotte)
 LOG_WRITE_VEHICLE = [Role.ADMIN]
-# Initiation mission : admin + gestionnaire (responsable du dépôt)
-LOG_WRITE_MISSION = [Role.ADMIN, Role.GESTIONNAIRE_STOCK]
+# Initiation mission : admin + superviseur (validation inter-zone) + gestionnaire (responsable du dépôt)
+LOG_WRITE_MISSION = [Role.ADMIN, Role.SUPERVISEUR, Role.GESTIONNAIRE_STOCK]
 # Validation mission (terminer/annuler) : admin + superviseur
 LOG_VALIDATE_MISSION = [Role.ADMIN, Role.SUPERVISEUR]
 
