@@ -110,6 +110,30 @@ class LoginView(APIView):
             user.failed_attempts = 0
             user.save(update_fields=["failed_attempts"])
 
+        # 2FA — si activée, on retourne un token temporaire au lieu des JWT
+        if user.two_factor_enabled:
+            from .services_2fa import (
+                create_temp_token,
+                generate_email_otp,
+                send_2fa_email,
+                store_email_otp,
+            )
+            method = user.two_factor_method or 'totp'
+            temp_token = create_temp_token(user.id, method)
+            resp_data = {
+                'requires_2fa': True,
+                'temp_token': temp_token,
+                'method': method,
+            }
+            if method == 'email':
+                code = generate_email_otp()
+                store_email_otp(user.id, code)
+                send_2fa_email(user, code)
+                resp_data['message'] = f'Code de vérification envoyé à {user.email}.'
+            else:
+                resp_data['message'] = 'Ouvrez votre application Authy et entrez le code affiché.'
+            return Response(resp_data, status=status.HTTP_200_OK)
+
         # Génération des tokens JWT
         refresh = RefreshToken.for_user(user)
         refresh["role"] = user.role

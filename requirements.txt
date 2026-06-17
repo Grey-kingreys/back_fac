@@ -24,6 +24,9 @@ reportlab>=4.2
 # QR Code
 qrcode[pil]>=8.0
 
+# 2FA — TOTP (compatible Authy / Google Authenticator)
+pyotp>=2.9
+
 # Fichiers statiques - Production
 whitenoise>=6.7
 

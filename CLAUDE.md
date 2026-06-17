@@ -73,6 +73,7 @@ python manage.py migrate
 | logistique | 0004 — champs Vehicule + qr_code Mission + Maintenance + Panne + DocumentVehicule + ConsommationCarburant |
 | rh | 0002 — commande/mission/transfert FK sur Document + HistoriqueAffectation |
 | notifications | 0001 — Notification |
+| accounts | 0006 — `two_factor_enabled` + `two_factor_method` + `totp_secret` sur CustomUser (17/06/2026) |
 
 ---
 
@@ -91,6 +92,11 @@ Préfixe commun : `/api/`
 | POST | `/auth/password-reset/` |
 | POST | `/auth/password-reset/confirm/` |
 | GET/POST | `/auth/first-login/` |
+| POST | `/auth/2fa/setup/` | IsAuthenticated — method='totp' → QR base64 + secret ; method='email' → envoie OTP |
+| POST | `/auth/2fa/setup-verify/` | IsAuthenticated — vérifie code, active 2FA sur le user |
+| POST | `/auth/2fa/disable/` | IsAuthenticated — désactive 2FA (requiert password) |
+| POST | `/auth/2fa/login-verify/` | AllowAny — temp_token + code → access + refresh + user |
+| POST | `/auth/2fa/resend/` | AllowAny — renvoie OTP email (méthode email uniquement) |
 
 ### Users & Audit
 | Méthode | URL |
@@ -404,6 +410,40 @@ Entièrement **commenté** dans `docker-compose.yml`. OTel installé. Pour activ
 | `entrypoint.sh` | migrate → seed → gunicorn |
 | `setup.cfg` | flake8 + isort (profile black) |
 | `requirements.txt` | Django 5.x, DRF 3.15, SimpleJWT, drf-spectacular, reportlab, qrcode[pil], openpyxl |
+
+---
+
+## Bugs de serializers corrigés (17/06/2026) — Audit cross-platform mobile/backend
+
+> **Contexte :** Les modèles `Zone` et `Depot` utilisent des noms de champs en **anglais** (`name`, `code`), mais 11 champs `CharField(source=...)` pointaient vers `.nom` (français) — ce qui retournait silencieusement `None` côté DRF sans lever d'erreur. Symptôme observé : création de zone/dépôt impossible côté mobile sans aucun message d'erreur.
+
+### Convention confirmée (source de vérité : `apps/companies/models.py`)
+| Modèle | Champ nom | Convention |
+|--------|-----------|------------|
+| `Company` | `name` | Anglais |
+| `Zone` | `name`, `code` | Anglais |
+| `Depot` | `name`, `code` | Anglais |
+| `CaissePhysique` | `nom` | Français ← CORRECT |
+| `CaisseZone` | `nom` | Français ← CORRECT |
+| `Produit` | `nom` | Français ← CORRECT |
+| `Fournisseur` | `nom` | Français ← CORRECT |
+| `Employe` | `nom`, `prenom` | Français ← CORRECT |
+
+### Corrections appliquées (`source='.nom'` → `source='.name'`)
+
+| Fichier | Serializer | Champ corrigé |
+|---------|-----------|---------------|
+| `apps/finance/serializers.py` L.40 | `CaissePhysiqueSerializer` | `depot_nom = CharField(source='depot.name')` |
+| `apps/finance/serializers.py` L.117 | `CompteMobileMoneySerializer` | `depot_nom = CharField(source='depot.name')` |
+| `apps/finance/serializers.py` L.153 | `CaisseZoneSerializer` | `zone_nom = CharField(source='zone.name')` |
+| `apps/finance/serializers.py` L.201 | `DepenseOperationnelleSerializer` | `depot_nom = CharField(source='depot.name', allow_null=True)` |
+| `apps/logistique/serializers.py` | `MissionListSerializer` | `depot_depart_nom`, `depot_arrivee_nom` → `.name` |
+| `apps/logistique/serializers.py` | `MissionDetailSerializer` | `depot_depart_nom`, `depot_arrivee_nom` → `.name` |
+| `apps/rh/serializers.py` | `EmployeListSerializer`, `EmployeDetailSerializer`, `ObjectifVenteSerializer` | `depot_nom = CharField(source='depot.name')` |
+| `apps/stocks/serializers.py` L.222 | `InventaireDetailSerializer` | `depot_nom = CharField(source='depot.name')` |
+| `apps/produits/serializers.py` L.196 | `CommandeFournisseurDetailSerializer` | `depot_nom = CharField(source='depot_destination.name')` |
+
+> ⚠️ **Règle à respecter :** Toujours vérifier `apps/companies/models.py` avant d'écrire un `source=` sur un champ de Zone ou Depot. Ces modèles sont en anglais. Les autres modèles métier (Produit, Fournisseur, Employe, Caisse*) sont en français.
 
 ---
 

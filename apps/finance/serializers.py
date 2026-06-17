@@ -37,7 +37,7 @@ class TauxChangeSerializer(serializers.ModelSerializer):
 
 
 class CaissePhysiqueSerializer(serializers.ModelSerializer):
-    depot_nom = serializers.CharField(source='depot.nom', read_only=True)
+    depot_nom = serializers.CharField(source='depot.name', read_only=True)
 
     class Meta:
         model = CaissePhysique
@@ -114,7 +114,7 @@ class FermerSessionSerializer(serializers.Serializer):
 # ── Mobile Money ──────────────────────────────────────────────────────────────
 class CompteMobileMoneySerializer(serializers.ModelSerializer):
     operateur_label = serializers.CharField(source='get_operateur_display', read_only=True)
-    depot_nom = serializers.CharField(source='depot.nom', read_only=True)
+    depot_nom = serializers.CharField(source='depot.name', read_only=True)
 
     class Meta:
         model = CompteMobileMoney
@@ -150,7 +150,7 @@ class TransactionMobileMoneyInputSerializer(serializers.Serializer):
 
 # ── Hiérarchie caisses ────────────────────────────────────────────────────────
 class CaisseZoneSerializer(serializers.ModelSerializer):
-    zone_nom = serializers.CharField(source='zone.nom', read_only=True)
+    zone_nom = serializers.CharField(source='zone.name', read_only=True)
 
     class Meta:
         model = CaisseZone
@@ -198,7 +198,7 @@ class VersementCaisseSerializer(serializers.ModelSerializer):
 
 class DepenseOperationnelleSerializer(serializers.ModelSerializer):
     enregistre_par_nom = serializers.CharField(source='enregistre_par.get_full_name', read_only=True)
-    depot_nom = serializers.CharField(source='depot.nom', read_only=True, allow_null=True)
+    depot_nom = serializers.CharField(source='depot.name', read_only=True, allow_null=True)
 
     class Meta:
         model = DepenseOperationnelle

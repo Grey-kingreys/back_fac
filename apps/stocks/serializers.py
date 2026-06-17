@@ -219,7 +219,7 @@ class InventaireListSerializer(serializers.ModelSerializer):
 
 
 class InventaireDetailSerializer(serializers.ModelSerializer):
-    depot_nom = serializers.CharField(source='depot.nom', read_only=True)
+    depot_nom = serializers.CharField(source='depot.name', read_only=True)
     statut_label = serializers.CharField(source='get_statut_display', read_only=True)
     cree_par_nom = serializers.CharField(source='cree_par.get_full_name', read_only=True)
     lignes = LigneInventaireSerializer(many=True, read_only=True)

@@ -9,7 +9,7 @@ from .models import Conge, Document, Employe, HistoriqueAffectation, ObjectifVen
 
 class EmployeListSerializer(serializers.ModelSerializer):
     nom_complet = serializers.CharField(read_only=True)
-    depot_nom = serializers.CharField(source='depot.nom', read_only=True)
+    depot_nom = serializers.CharField(source='depot.name', read_only=True)
     statut_label = serializers.CharField(source='get_statut_display', read_only=True)
 
     class Meta:
@@ -22,7 +22,7 @@ class EmployeListSerializer(serializers.ModelSerializer):
 
 class EmployeDetailSerializer(serializers.ModelSerializer):
     nom_complet = serializers.CharField(read_only=True)
-    depot_nom = serializers.CharField(source='depot.nom', read_only=True)
+    depot_nom = serializers.CharField(source='depot.name', read_only=True)
     statut_label = serializers.CharField(source='get_statut_display', read_only=True)
 
     class Meta:
@@ -101,7 +101,7 @@ class DocumentSerializer(serializers.ModelSerializer):
 
 
 class ObjectifVenteSerializer(serializers.ModelSerializer):
-    depot_nom = serializers.CharField(source='depot.nom', read_only=True)
+    depot_nom = serializers.CharField(source='depot.name', read_only=True)
     taux_realisation = serializers.FloatField(read_only=True)
 
     class Meta:

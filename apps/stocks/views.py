@@ -447,6 +447,8 @@ class AjustementStockViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin)
             'depot__zone__company', 'produit', 'demande_par'
         ).order_by('-created_at')
         user = self.request.user
+        if not user.is_authenticated:
+            return qs.none()
         if not user.company:
             return qs.none()
         qs = qs.filter(company=user.company)
