@@ -413,6 +413,32 @@ Entièrement **commenté** dans `docker-compose.yml`. OTel installé. Pour activ
 
 ---
 
+## Corrections permissions superadmin (17/06/2026) — Audit skill gestion-multisites
+
+**Problème :** `HasRole.has_permission()` bypassait le superadmin (`if user.is_superadmin: return True`), lui donnant accès à TOUS les endpoints opérationnels (zones, dépôts, users, produits, stocks, finance, ventes, logistique, RH) — violation du CDC.
+
+**Règle CDC :** Le superadmin gère la plateforme (companies, activation, facturation, dashboard agrégé). Il ne peut PAS accéder aux opérations internes des entreprises.
+
+| Fichier | Correction |
+|---------|-----------|
+| `apps/accounts/permissions.py` | Supprimé le bypass superadmin dans `HasRole.has_permission()` + ajout classe `IsSuperAdminBlocked` |
+| `apps/companies/views.py` | `IsSuperAdminBlocked()` ajouté en premier dans `CompanyObjectMixin.get_permissions()` |
+| `apps/accounts/views_users.py` | `IsSuperAdminBlocked()` ajouté en premier dans `UserViewSet.get_permissions()` |
+| `apps/accounts/tests/test_zones_depots.py` | 2 tests mis à jour → assertent 403 pour superadmin |
+| `apps/accounts/tests/test_users.py` | 1 test mis à jour → asserte 403 pour superadmin |
+| `apps/accounts/tests/test_permissions.py` | `test_superadmin_bloque_si_role_absent` → asserte False (HasRole sans bypass) |
+| `apps/accounts/test_permissions.py` | Même correction (style TestCase) |
+| `apps/produits/tests/test_produits.py` | `test_superadmin_refuse_produits` → asserte 403 |
+
+**Endpoints superadmin TOUJOURS accessibles (non affectés) :**
+
+- `GET/POST /api/companies/` — vérifie `role == SUPERADMIN` manuellement
+- `GET/PATCH /api/companies/{id}/` — idem
+- `POST /api/companies/{id}/toggle/` — idem
+- `GET /api/superadmin/dashboard/` — idem
+
+---
+
 ## Bugs de serializers corrigés (17/06/2026) — Audit cross-platform mobile/backend
 
 > **Contexte :** Les modèles `Zone` et `Depot` utilisent des noms de champs en **anglais** (`name`, `code`), mais 11 champs `CharField(source=...)` pointaient vers `.nom` (français) — ce qui retournait silencieusement `None` côté DRF sans lever d'erreur. Symptôme observé : création de zone/dépôt impossible côté mobile sans aucun message d'erreur.

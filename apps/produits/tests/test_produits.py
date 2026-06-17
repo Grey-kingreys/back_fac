@@ -159,9 +159,10 @@ class TestProduitList:
         res = anon_client.get(PRODUITS_URL)
         assert res.status_code == status.HTTP_401_UNAUTHORIZED
 
-    def test_superadmin_voit_tous_produits(self, client_superadmin, produit_a):
+    def test_superadmin_refuse_produits(self, client_superadmin, produit_a):
+        # Le superadmin gère la plateforme, pas les données métier des entreprises.
         res = client_superadmin.get(PRODUITS_URL)
-        assert res.status_code == status.HTTP_200_OK
+        assert res.status_code == status.HTTP_403_FORBIDDEN
 
 
 @pytest.mark.django_db

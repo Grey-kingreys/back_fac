@@ -70,12 +70,10 @@ class TestUserList:
         emails = [u["email"] for u in res.data["results"]]
         assert user_with_depot.email in emails
 
-    def test_superadmin_voit_toutes_companies(self, client_superadmin, commercial_a, commercial_b):
+    def test_superadmin_refuse_users_operationnels(self, client_superadmin, commercial_a, commercial_b):
+        # Le superadmin gère la plateforme (companies), pas les utilisateurs internes.
         res = client_superadmin.get(USERS_URL)
-        assert res.status_code == status.HTTP_200_OK
-        emails = [u["email"] for u in res.data["results"]]
-        assert commercial_a.email in emails
-        assert commercial_b.email in emails
+        assert res.status_code == status.HTTP_403_FORBIDDEN
 
 
 # ─────────────────────────────────────────────────────────────────────────────
