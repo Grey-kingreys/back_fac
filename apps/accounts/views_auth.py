@@ -113,8 +113,10 @@ class LoginView(APIView):
         # 2FA — si activée, on retourne un token temporaire au lieu des JWT
         if user.two_factor_enabled:
             from .services_2fa import (
-                create_temp_token, generate_email_otp,
-                store_email_otp, send_2fa_email,
+                create_temp_token,
+                generate_email_otp,
+                send_2fa_email,
+                store_email_otp,
             )
             method = user.two_factor_method or 'totp'
             temp_token = create_temp_token(user.id, method)
