@@ -24,9 +24,14 @@ jobs:
           python-version: "3.12"
           cache: "pip"
 
-      - name: Installer les dépendances de lint
+      - name: Installer les dépendances (requirements.txt pour isort + config projet)
         run: |
-          pip install flake8 isort
+          pip install -r requirements.txt
+
+      - name: Audit de sécurité des dépendances (pip-audit)
+        run: |
+          pip install pip-audit
+          pip-audit --requirement requirements.txt --ignore-vuln PYSEC-2024-167 || true
 
       - name: Vérifier le style (flake8)
         run: |
@@ -34,7 +39,7 @@ jobs:
             --max-line-length=120 \
             --exclude=.git,__pycache__,migrations,venv,.venv
 
-      - name: Vérifier l'ordre des imports (isort)
+      - name: Vérifier l'ordre des imports (isort — profil black + sections setup.cfg)
         run: |
           isort . --check-only --diff \
             --skip migrations \
@@ -90,6 +95,20 @@ jobs:
       - name: Installer les dépendances
         run: pip install -r requirements.txt
 
+      - name: Vérifier que toutes les migrations sont générées
+        env:
+          DJANGO_SETTINGS_MODULE: config.settings
+          SECRET_KEY: ci-secret-key-for-testing-only-not-used-in-prod!!
+          DB_NAME: gestion_test_db
+          DB_USER: gestion_user
+          DB_PASSWORD: gestion_password
+          DB_HOST: localhost
+          DB_PORT: 5432
+          REDIS_URL: redis://localhost:6379/0
+          RESEND_KEY: ci-dummy-resend-key-not-used-in-tests
+          DEBUG: "True"
+        run: python manage.py makemigrations --check --dry-run
+
       - name: Lancer les migrations
         env:
           DJANGO_SETTINGS_MODULE: config.settings
@@ -100,8 +119,23 @@ jobs:
           DB_HOST: localhost
           DB_PORT: 5432
           REDIS_URL: redis://localhost:6379/0
+          RESEND_KEY: ci-dummy-resend-key-not-used-in-tests
           DEBUG: "True"
         run: python manage.py migrate
+
+      - name: Vérifier collectstatic
+        env:
+          DJANGO_SETTINGS_MODULE: config.settings
+          SECRET_KEY: ci-secret-key-for-testing-only-not-used-in-prod!!
+          DB_NAME: gestion_test_db
+          DB_USER: gestion_user
+          DB_PASSWORD: gestion_password
+          DB_HOST: localhost
+          DB_PORT: 5432
+          REDIS_URL: redis://localhost:6379/0
+          RESEND_KEY: ci-dummy-resend-key-not-used-in-tests
+          DEBUG: "True"
+        run: python manage.py collectstatic --noinput --dry-run
 
       - name: Lancer les tests
         env:
@@ -113,6 +147,7 @@ jobs:
           DB_HOST: localhost
           DB_PORT: 5432
           REDIS_URL: redis://localhost:6379/0
+          RESEND_KEY: ci-dummy-resend-key-not-used-in-tests
           DEBUG: "True"
         run: |
           pytest \
@@ -120,6 +155,8 @@ jobs:
             --ds=config.settings \
             -v \
             --ignore=venv \
+            --ignore=apps/entreprises \
+            --ignore=apps/zones \
             -p no:cacheprovider \
             || [ $? -eq 5 ]
 

@@ -4,6 +4,8 @@ apps/ventes/serializers.py
 
 from rest_framework import serializers
 
+from apps.companies.models import Depot
+
 from .models import (
     Client,
     Commande,
@@ -185,12 +187,28 @@ class CommandeCreateSerializer(serializers.Serializer):
             raise serializers.ValidationError("Au moins une ligne est requise.")
         return value
 
+    def validate(self, attrs):
+        MODES_MOBILE = {Paiement.Mode.ORANGE_MONEY, Paiement.Mode.MTN_MONEY, Paiement.Mode.VIREMENT}
+        if attrs.get('mode_paiement_initial') in MODES_MOBILE and not attrs.get('reference_paiement', '').strip():
+            raise serializers.ValidationError(
+                {'reference_paiement': "La référence de transaction est obligatoire pour ce mode de paiement."}
+            )
+        return attrs
+
 
 class PaiementInputSerializer(serializers.Serializer):
     """Ajout d'un paiement sur une commande existante."""
     montant = serializers.DecimalField(max_digits=14, decimal_places=2, min_value=0.01)
     mode = serializers.ChoiceField(choices=Paiement.Mode.choices)
     reference = serializers.CharField(required=False, allow_blank=True)
+
+    def validate(self, attrs):
+        MODES_MOBILE = {Paiement.Mode.ORANGE_MONEY, Paiement.Mode.MTN_MONEY, Paiement.Mode.VIREMENT}
+        if attrs.get('mode') in MODES_MOBILE and not attrs.get('reference', '').strip():
+            raise serializers.ValidationError(
+                {'reference': "La référence de transaction est obligatoire pour ce mode de paiement."}
+            )
+        return attrs
 
 
 # ── Historique points ─────────────────────────────────────────────────────────
@@ -265,7 +283,7 @@ class DevisDetailSerializer(serializers.ModelSerializer):
 
 class DevisCreateSerializer(serializers.Serializer):
     depot = serializers.PrimaryKeyRelatedField(
-        queryset=__import__('apps.companies.models', fromlist=['Depot']).Depot.objects.all()
+        queryset=Depot.objects.all()
     )
     client = serializers.PrimaryKeyRelatedField(
         queryset=Client.objects.all(), required=False, allow_null=True,
@@ -278,6 +296,22 @@ class DevisCreateSerializer(serializers.Serializer):
         if not value:
             raise serializers.ValidationError("Au moins une ligne est requise.")
         return value
+
+    def validate(self, attrs):
+        request = self.context.get('request')
+        company = request.user.company if request else None
+        if company:
+            depot = attrs.get('depot')
+            if depot and depot.zone.company != company:
+                raise serializers.ValidationError(
+                    {'depot': "Ce dépôt n'appartient pas à votre entreprise."}
+                )
+            client = attrs.get('client')
+            if client and client.company != company:
+                raise serializers.ValidationError(
+                    {'client': "Ce client n'appartient pas à votre entreprise."}
+                )
+        return attrs
 
 
 # ── Retours commandes ─────────────────────────────────────────────────────────
@@ -331,6 +365,15 @@ class RetourCommandeCreateSerializer(serializers.Serializer):
             raise serializers.ValidationError("Au moins une ligne est requise.")
         return value
 
+    def validate_commande(self, commande):
+        request = self.context.get('request')
+        company = request.user.company if request else None
+        if company and commande.company != company:
+            raise serializers.ValidationError(
+                "Cette commande n'appartient pas à votre entreprise."
+            )
+        return commande
+
 
 # ── Promotions ────────────────────────────────────────────────────────────────
 class PromotionSerializer(serializers.ModelSerializer):
@@ -345,3 +388,24 @@ class PromotionSerializer(serializers.ModelSerializer):
             'est_active_aujourd_hui', 'created_by', 'created_at',
         ]
         read_only_fields = ['id', 'created_by', 'created_at', 'est_active_aujourd_hui']
+
+    def validate(self, attrs):
+        request = self.context.get('request')
+        company = request.user.company if request else None
+        if company:
+            client = attrs.get('client')
+            if client and client.company != company:
+                raise serializers.ValidationError(
+                    {'client': "Ce client n'appartient pas à votre entreprise."}
+                )
+            categorie = attrs.get('categorie')
+            if categorie and categorie.company != company:
+                raise serializers.ValidationError(
+                    {'categorie': "Cette catégorie n'appartient pas à votre entreprise."}
+                )
+            produit = attrs.get('produit')
+            if produit and produit.company != company:
+                raise serializers.ValidationError(
+                    {'produit': "Ce produit n'appartient pas à votre entreprise."}
+                )
+        return attrs

@@ -16,7 +16,7 @@ from rest_framework.response import Response
 from rest_framework.viewsets import GenericViewSet
 
 from apps.accounts.models import Role
-from apps.accounts.permissions import CompanyFilterMixin, HasRole, IsCompanyMember
+from apps.accounts.permissions import CompanyFilterMixin, HasRole, IsCompanyMember, IsSuperAdminBlocked
 
 from .models import AjustementStock, Inventaire, LigneInventaire, MouvementStock, StockDepot, TransfertStock
 from .serializers import (
@@ -57,7 +57,7 @@ class StockDepotViewSet(CompanyFilterMixin, GenericViewSet, ListModelMixin, Retr
     STOCK_ROLES = [Role.ADMIN, Role.SUPERVISEUR, Role.GESTIONNAIRE_STOCK, Role.CAISSIER]
 
     def get_permissions(self):
-        return [IsAuthenticated(), HasRole(self.STOCK_ROLES)]
+        return [IsAuthenticated(), IsSuperAdminBlocked(), HasRole(self.STOCK_ROLES)]
 
     # Override : StockDepot n'a pas de FK company directe
     def get_queryset(self):
@@ -70,6 +70,11 @@ class StockDepotViewSet(CompanyFilterMixin, GenericViewSet, ListModelMixin, Retr
         if not company:
             return qs.none()
         qs = qs.filter(depot__zone__company=company)
+
+        if user.role == Role.SUPERVISEUR:
+            if not user.zone:
+                return qs.none()
+            qs = qs.filter(depot__zone=user.zone)
 
         depot = self.request.query_params.get('depot')
         produit = self.request.query_params.get('produit')
@@ -107,6 +112,7 @@ class StockDepotViewSet(CompanyFilterMixin, GenericViewSet, ListModelMixin, Retr
         detail=False, methods=['post'], url_path='entree',
         permission_classes=[
             IsAuthenticated,
+            IsSuperAdminBlocked,
             HasRole([Role.ADMIN, Role.GESTIONNAIRE_STOCK]),
         ],
     )
@@ -118,6 +124,8 @@ class StockDepotViewSet(CompanyFilterMixin, GenericViewSet, ListModelMixin, Retr
         depot = d['depot']
         if depot.zone.company != company:
             raise PermissionDenied("Ce dépôt n'appartient pas à votre entreprise.")
+        if request.user.role == Role.GESTIONNAIRE_STOCK and request.user.depot and request.user.depot != depot:
+            raise PermissionDenied("Un gestionnaire de stock ne peut agir que sur son propre dépôt.")
         if d['produit'].company != company:
             raise PermissionDenied("Ce produit n'appartient pas à votre entreprise.")
         try:
@@ -138,6 +146,7 @@ class StockDepotViewSet(CompanyFilterMixin, GenericViewSet, ListModelMixin, Retr
         detail=False, methods=['post'], url_path='sortie',
         permission_classes=[
             IsAuthenticated,
+            IsSuperAdminBlocked,
             HasRole([Role.ADMIN, Role.GESTIONNAIRE_STOCK, Role.CAISSIER]),
         ],
     )
@@ -149,6 +158,8 @@ class StockDepotViewSet(CompanyFilterMixin, GenericViewSet, ListModelMixin, Retr
         depot = d['depot']
         if depot.zone.company != company:
             raise PermissionDenied("Ce dépôt n'appartient pas à votre entreprise.")
+        if request.user.role == Role.GESTIONNAIRE_STOCK and request.user.depot and request.user.depot != depot:
+            raise PermissionDenied("Un gestionnaire de stock ne peut agir que sur son propre dépôt.")
         try:
             mvt = sortie_stock(
                 depot=depot, produit=d['produit'],
@@ -170,7 +181,7 @@ class MouvementStockViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
     ROLES = [Role.ADMIN, Role.SUPERVISEUR, Role.GESTIONNAIRE_STOCK]
 
     def get_permissions(self):
-        return [IsAuthenticated(), HasRole(self.ROLES)]
+        return [IsAuthenticated(), IsSuperAdminBlocked(), HasRole(self.ROLES)]
 
     def get_queryset(self):
         qs = MouvementStock.objects.select_related(
@@ -182,6 +193,11 @@ class MouvementStockViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
         if not company:
             return qs.none()
         qs = qs.filter(depot__zone__company=company)
+
+        if user.role == Role.SUPERVISEUR:
+            if not user.zone:
+                return qs.none()
+            qs = qs.filter(depot__zone=user.zone)
 
         depot = self.request.query_params.get('depot')
         produit = self.request.query_params.get('produit')
@@ -219,8 +235,8 @@ class TransfertStockViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
 
     def get_permissions(self):
         if self.action in ('list', 'retrieve'):
-            return [IsAuthenticated(), HasRole(self.ROLES)]
-        return [IsAuthenticated(), HasRole(self.WRITE_ROLES)]
+            return [IsAuthenticated(), IsSuperAdminBlocked(), HasRole(self.ROLES)]
+        return [IsAuthenticated(), IsSuperAdminBlocked(), HasRole(self.WRITE_ROLES)]
 
     def get_queryset(self):
         qs = TransfertStock.objects.select_related(
@@ -232,6 +248,14 @@ class TransfertStockViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
         if not company:
             return qs.none()
         qs = qs.filter(company=company)
+
+        if user.role == Role.SUPERVISEUR:
+            if not user.zone:
+                return qs.none()
+            from django.db.models import Q
+            qs = qs.filter(
+                Q(depot_source__zone=user.zone) | Q(depot_destination__zone=user.zone)
+            )
 
         statut = self.request.query_params.get('statut')
         if statut:
@@ -306,12 +330,24 @@ class TransfertStockViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
             raise ValidationError(str(e))
         return Response(TransfertDetailSerializer(obj).data)
 
-    @extend_schema(summary="Annuler un transfert (brouillon seulement)")
+    @extend_schema(summary="Valider un transfert inter-zone (superviseur/admin requis)")
+    @action(detail=True, methods=['post'], url_path='valider')
+    def valider(self, request, pk=None):
+        if not HasRole([Role.ADMIN, Role.SUPERVISEUR]).has_permission(request, self):
+            raise PermissionDenied("Seul le superviseur ou l'admin peut valider un transfert.")
+        obj = self.get_object()
+        if obj.statut != TransfertStock.Statut.BROUILLON:
+            raise ValidationError("Seul un transfert en brouillon peut être validé.")
+        obj.statut = TransfertStock.Statut.VALIDE
+        obj.save(update_fields=['statut'])
+        return Response(TransfertDetailSerializer(obj).data)
+
+    @extend_schema(summary="Annuler un transfert (brouillon ou validé seulement)")
     @action(detail=True, methods=['post'], url_path='annuler')
     def annuler(self, request, pk=None):
         obj = self.get_object()
-        if obj.statut not in (TransfertStock.Statut.BROUILLON,):
-            raise ValidationError("Seul un transfert en brouillon peut être annulé.")
+        if obj.statut not in (TransfertStock.Statut.BROUILLON, TransfertStock.Statut.VALIDE):
+            raise ValidationError("Seul un transfert en brouillon ou validé peut être annulé.")
         obj.statut = TransfertStock.Statut.ANNULE
         obj.save(update_fields=['statut'])
         return Response(TransfertDetailSerializer(obj).data)
@@ -323,10 +359,10 @@ class InventaireViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
 
     ROLES = [Role.ADMIN, Role.SUPERVISEUR, Role.GESTIONNAIRE_STOCK]
     WRITE_ROLES = [Role.ADMIN, Role.SUPERVISEUR]
-    CREATE_ROLES = [Role.ADMIN, Role.SUPERVISEUR]
+    CREATE_ROLES = [Role.ADMIN, Role.SUPERVISEUR, Role.GESTIONNAIRE_STOCK]
 
     def get_permissions(self):
-        return [IsAuthenticated(), HasRole(self.ROLES)]
+        return [IsAuthenticated(), IsSuperAdminBlocked(), HasRole(self.ROLES)]
 
     def get_serializer_class(self):
         return InventaireListSerializer if self.action == 'list' else InventaireDetailSerializer
@@ -339,6 +375,12 @@ class InventaireViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
         if not user.company:
             return qs.none()
         qs = qs.filter(company=user.company)
+
+        if user.role == Role.SUPERVISEUR:
+            if not user.zone:
+                return qs.none()
+            qs = qs.filter(depot__zone=user.zone)
+
         depot = self.request.query_params.get('depot')
         statut = self.request.query_params.get('statut')
         if depot:
@@ -438,7 +480,7 @@ class AjustementStockViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin)
     serializer_class = AjustementStockSerializer
 
     def get_permissions(self):
-        return [IsAuthenticated(), HasRole([
+        return [IsAuthenticated(), IsSuperAdminBlocked(), HasRole([
             Role.ADMIN, Role.SUPERVISEUR, Role.GESTIONNAIRE_STOCK
         ])]
 
@@ -452,6 +494,12 @@ class AjustementStockViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin)
         if not user.company:
             return qs.none()
         qs = qs.filter(company=user.company)
+
+        if user.role == Role.SUPERVISEUR:
+            if not user.zone:
+                return qs.none()
+            qs = qs.filter(depot__zone=user.zone)
+
         statut = self.request.query_params.get('statut')
         depot = self.request.query_params.get('depot')
         if statut:
@@ -480,6 +528,8 @@ class AjustementStockViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin)
         if not HasRole([Role.ADMIN, Role.SUPERVISEUR]).has_permission(request, self):
             raise PermissionDenied("Droits insuffisants.")
         ajustement = self.get_object()
+        if ajustement.demande_par == request.user:
+            raise PermissionDenied("Vous ne pouvez pas approuver votre propre demande d'ajustement.")
         if ajustement.statut != AjustementStock.Statut.EN_ATTENTE:
             raise ValidationError("Seul un ajustement en attente peut être approuvé.")
 

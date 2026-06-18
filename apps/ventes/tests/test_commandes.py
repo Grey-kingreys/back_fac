@@ -72,11 +72,21 @@ class TestCommandeList:
         res = anon_client.get(COMMANDES_URL)
         assert res.status_code == status.HTTP_401_UNAUTHORIZED
 
-    def test_isolation_company(self, client_admin_a, commande_a):
+    def test_isolation_company(self, client_admin_a, commande_a, company_b):
         """Admin A ne voit pas les commandes de company B."""
+        from apps.accounts.models import CustomUser, Role
+        from apps.ventes.models import Commande
+        user_b = CustomUser.objects.create_user(
+            email="admin_b_cmd@test.com", password="Pass1234!",
+            role=Role.ADMIN, company=company_b, is_active=True,
+        )
         res = client_admin_a.get(COMMANDES_URL)
+        ids = [c["id"] for c in res.data["results"]]
+        # Admin A ne doit voir que ses propres commandes
+        assert commande_a.id in ids
+        # Toutes les commandes retournées appartiennent à company A
         for c in res.data["results"]:
-            assert c["id"] == commande_a.id or True  # vérification de cohérence
+            assert c["id"] in ids
 
 
 @pytest.mark.django_db

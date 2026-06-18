@@ -7,7 +7,7 @@ from rest_framework import permissions
 from rest_framework.request import Request
 from rest_framework.views import View
 
-from .models import CustomUser, Role
+from .models import Role, CustomUser
 
 
 class IsCompanyMember(permissions.BasePermission):
@@ -23,10 +23,8 @@ class IsCompanyMember(permissions.BasePermission):
         """
         Vérifie l'accès à un objet spécifique.
         L'objet doit avoir un attribut 'company' ou 'get_company()'.
+        Le superadmin n'a pas accès aux données métier internes — isolation SaaS §8.
         """
-        if request.user.is_superadmin:
-            return True
-
         user_company = request.user.company
         if not user_company:
             return False
@@ -82,10 +80,6 @@ class IsOwnerOrCompanyAdmin(permissions.BasePermission):
         """Vérifie l'accès à un objet spécifique."""
         user = request.user
 
-        # Superadmin a tous les droits
-        if user.is_superadmin:
-            return True
-
         # L'utilisateur peut accéder à ses propres ressources
         if hasattr(obj, 'user') and obj.user == user:
             return True
@@ -102,11 +96,25 @@ class IsOwnerOrCompanyAdmin(permissions.BasePermission):
 
 class CompanyFilterMixin:
     """
-    Mixin pour filtrer automatiquement les QuerySets par company.
-    Surcharger `company_lookup_field` si la company est accessible via une relation
-    (ex: 'zone__company' pour Depot).
+    Mixin pour filtrer automatiquement les QuerySets par company, puis par zone
+    pour les superviseurs.
+
+    - `company_lookup_field` : chemin ORM vers la company (défaut : 'company').
+    - `zone_lookup_field`    : chemin ORM vers la Zone (ex: 'depot__zone').
+      Si défini, les superviseurs sont restreints à leur zone.
+      Si None, les superviseurs voient toutes les données de la company (ex: catalogue produits).
     """
-    company_lookup_field = 'company'  # ← nouveau
+    company_lookup_field = 'company'
+    zone_lookup_field = None
+
+    def check_permissions(self, request):
+        """Bloque le superadmin en défense en profondeur avant tout check de rôle."""
+        if request.user and request.user.is_authenticated and request.user.is_superadmin:
+            self.permission_denied(
+                request,
+                message="Le super-administrateur n'a pas accès aux opérations internes des entreprises.",
+            )
+        super().check_permissions(request)
 
     def get_queryset(self):
         if hasattr(self, 'queryset'):
@@ -118,15 +126,20 @@ class CompanyFilterMixin:
 
         user = self.request.user
 
-        if user.is_superadmin:
-            return queryset
-
         user_company = user.company
         if not user_company:
             return queryset.none()
 
-        # Utilise le lookup field (supporte 'company' et 'zone__company', etc.)
-        return queryset.filter(**{self.company_lookup_field: user_company})
+        queryset = queryset.filter(**{self.company_lookup_field: user_company})
+
+        # Scope zone pour les superviseurs (règle CDC : superviseur limité à sa zone)
+        if user.role == Role.SUPERVISEUR:
+            if not user.zone:
+                return queryset.none()
+            if self.zone_lookup_field:
+                queryset = queryset.filter(**{self.zone_lookup_field: user.zone})
+
+        return queryset
 
 
 class DepotFilterMixin:
@@ -134,16 +147,21 @@ class DepotFilterMixin:
     Mixin pour filtrer automatiquement les QuerySets par dépôt de l'utilisateur.
     """
 
+    def check_permissions(self, request):
+        """Bloque le superadmin en défense en profondeur avant tout check de rôle."""
+        if request.user and request.user.is_authenticated and request.user.is_superadmin:
+            self.permission_denied(
+                request,
+                message="Le super-administrateur n'a pas accès aux opérations internes des entreprises.",
+            )
+        super().check_permissions(request)
+
     def get_queryset(self):
         """Filtre le queryset par dépôt de l'utilisateur."""
         queryset = super().get_queryset()
         user = self.request.user
 
-        # Le superadmin voit tout
-        if user.is_superadmin:
-            return queryset
-
-        # Les autres utilisateurs voient seulement leur dépôt
+        # Les utilisateurs sans dépôt n'ont rien à voir
         user_depot = user.depot
         if not user_depot:
             return queryset.none()
@@ -172,9 +190,6 @@ class BaseCompanyPermission(permissions.BasePermission):
 
         if not user or not user.is_authenticated:
             return False
-
-        if user.is_superadmin:
-            return True
 
         # Vérifier le rôle si spécifié
         if self.allowed_roles and user.role not in self.allowed_roles:
@@ -212,10 +227,10 @@ class IsAdminOrSuperAdmin(BaseCompanyPermission):
 
 
 class IsSupervisorOrAbove(BaseCompanyPermission):
-    """Permission pour les superviseurs et au-dessus."""
+    """Permission pour les superviseurs et les admins (le superadmin est bloqué sur les données métier)."""
 
     def __init__(self):
-        super().__init__(allowed_roles=[Role.SUPERVISEUR, Role.ADMIN, Role.SUPERADMIN])
+        super().__init__(allowed_roles=[Role.SUPERVISEUR, Role.ADMIN])
 
 
 class IsCompanyMemberOrReadOnly(IsCompanyMember):
