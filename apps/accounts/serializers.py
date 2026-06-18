@@ -167,7 +167,6 @@ class UserCreateSerializer(serializers.ModelSerializer):
         """
         role = attrs.get('role')
         zone = attrs.get('zone')
-        depot = attrs.get('depot')
         if role == Role.SUPERVISEUR:
             if not zone:
                 raise serializers.ValidationError(
