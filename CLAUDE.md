@@ -16,7 +16,9 @@ docker compose exec web python manage.py migrate
 | App | Champ(s) ajouté(s) |
 |-----|---------------------|
 | `finance` | `DepenseOperationnelle.is_deleted` (BooleanField) + `deleted_at` (DateTimeField null) |
+| `finance` | **`ConfigurationCaisse`** (nouveau modèle — migration `0006` écrite manuellement) |
 | `accounts` | `CustomUser.first_login_done` default=False (était True) |
+| `accounts` | **`CustomUser.zone`** FK nullable vers Zone (pour rôle superviseur — migration `0007` à générer) |
 | `stocks` | `UniqueConstraint(company, numero)` sur `TransfertStock` + `Inventaire` |
 | `ventes` | `UniqueConstraint(company, numero)` sur `Commande` + `Devis` |
 | `logistique` | `UniqueConstraint(company, numero)` sur `Mission` |
@@ -92,6 +94,8 @@ python manage.py migrate
 | rh | 0002 — commande/mission/transfert FK sur Document + HistoriqueAffectation |
 | notifications | 0001 — Notification |
 | accounts | 0006 — `two_factor_enabled` + `two_factor_method` + `totp_secret` sur CustomUser (17/06/2026) |
+| accounts | 0007 — `zone` FK null=True sur CustomUser (superviseur → zone) — **à générer** |
+| finance | 0006 — `ConfigurationCaisse` (OneToOne company, duree_session/depot/zone_jours) — **écrite manuellement** |
 
 ---
 
@@ -152,7 +156,7 @@ Préfixe commun : `/api/`
 | GET | `/produits/{id}/stock/` |
 | CRUD | `/commandes-fournisseurs/` |
 | POST | `/commandes-fournisseurs/{id}/recevoir/` |
-| GET/POST | `/mouvements-dette-fournisseur/` |
+| GET/POST | `/mouvements-dette/` |
 | CRUD | `/evaluations-fournisseurs/` |
 
 ### Stocks
@@ -203,6 +207,7 @@ Préfixe commun : `/api/`
 | POST | `/sessions-caisse/{id}/fermer/` |
 | POST | `/sessions-caisse/{id}/transaction/` |
 | POST | `/versements-caisse/` | Versement inter-niveaux |
+| GET/PATCH | `/configuration-caisses/` |
 | CRUD | `/comptes-mobile-money/` |
 | POST | `/comptes-mobile-money/{id}/transaction/` |
 | GET | `/comptes-mobile-money/{id}/transactions/` |
@@ -294,6 +299,8 @@ Préfixe commun : `/api/`
 - `Promotion` : company, nom, TypePromotion (pourcentage/montant_fixe/prix_special), Cible (tous/client/categorie), produit FK null=True, date_debut/fin, `est_active_aujourd_hui()` method
 
 ### apps.finance
+
+- `ConfigurationCaisse` : company (OneToOne), duree_session_jours (default 1), duree_caisse_depot_jours (default 30), duree_caisse_zone_jours (default 90), updated_at, updated_by FK User — `clean()` enforce `session < depot < zone`
 - `TauxChange` : company, devise_source, devise_cible, taux, date_expiration, `est_expire` property
 - `CaissePhysique` : company, depot (OneToOne), devise (default GNF), solde_actuel — niveau dépôt
 - `CaisseZone` : company, zone (OneToOne), devise, solde_actuel — niveau zone
@@ -488,6 +495,34 @@ Entièrement **commenté** dans `docker-compose.yml`. OTel installé. Pour activ
 | `apps/produits/serializers.py` L.196 | `CommandeFournisseurDetailSerializer` | `depot_nom = CharField(source='depot_destination.name')` |
 
 > ⚠️ **Règle à respecter :** Toujours vérifier `apps/companies/models.py` avant d'écrire un `source=` sur un champ de Zone ou Depot. Ces modèles sont en anglais. Les autres modèles métier (Produit, Fournisseur, Employe, Caisse*) sont en français.
+
+---
+
+## Corrections + features (18/06/2026) — Session 3 (audit cross-platform mobile/backend)
+
+### Superviseur → Zone (accounts)
+
+`UserCreateSerializer` et `UserUpdateSerializer` : ajout `zone_id` (FK vers Zone, source=`zone`).  
+Règle enforce dans `validate()` : si `role == SUPERVISEUR` → `zone` obligatoire, `depot` effacé ; sinon `zone` effacé.  
+`UserListSerializer` et `UserDetailSerializer` : ajout champs `zone_id` + `zone_name`.  
+Email : validation globale (pas scoped company) pour éviter IntegrityError 500.
+
+### ConfigurationCaisse (finance)
+
+Nouveau modèle `ConfigurationCaisse` (OneToOne company) avec `duree_session_jours`, `duree_caisse_depot_jours`, `duree_caisse_zone_jours`.  
+`clean()` enforce `session < depot < zone`. Vue `ConfigurationCaisseView` (GET/PATCH). Route `/configuration-caisses/`.  
+Migration `finance/0006_configurationcaisse.py` écrite manuellement (pas de Python local).
+
+### Bugs corrigés
+
+| Fichier | Bug | Correction |
+| ------- | --- | ---------- |
+| `notifications/signals.py` | Anti-dedup filtre sur `type_notification='seuil_stock'` alors que notif créée avec `type='info'` → spam infini | Filtre changé en `type_notification='info'` |
+| `produits/views.py` | `MouvementDetteFournisseur.create()` — pas de vérif company fournisseur → cross-tenant possible | Check `fournisseur.company_id != request.user.company_id` |
+| `logistique/views.py` | `ConsommationCarburant.create()` — pas de vérif company véhicule/mission → cross-tenant possible | Check company vehicule + mission |
+| `companies/views.py` | `DepotViewSet.get_queryset()` — résidu `if user.is_superadmin: return qs` (dangereux même si IsSuperAdminBlocked en amont) | Supprimé |
+| `ventes/views.py` | `convertir` — condition morte `if devis.statut == ANNULE if hasattr(...) else False` → jamais True | Corrigé en `if devis.statut == EXPIRE: raise ValidationError(...)` |
+| `finance/serializers.py` | `VersementCaisseSerializer` — `motif_ecart` non requis même quand écart ≠ 0 | Validate : `motif_ecart` obligatoire si `montant_comptage_receveur != montant` |
 
 ---
 
