@@ -4,7 +4,8 @@ StockDepot, LotStock, MouvementStock, TransfertStock, LigneTransfert
 """
 
 from django.conf import settings
-from django.db import models
+from django.db import models, transaction
+from django.utils import timezone as tz
 from django.utils.translation import gettext_lazy as _
 
 
@@ -137,6 +138,7 @@ class TransfertStock(models.Model):
 
     class Statut(models.TextChoices):
         BROUILLON = 'brouillon', _("Brouillon")
+        VALIDE = 'valide', _("Validé — en attente d'expédition")
         EN_TRANSIT = 'en_transit', _("En transit")
         RECU = 'recu', _("Reçu")
         ANNULE = 'annule', _("Annulé")
@@ -145,7 +147,7 @@ class TransfertStock(models.Model):
         'companies.Company', on_delete=models.CASCADE,
         related_name='transferts_stock', verbose_name=_("Entreprise"),
     )
-    numero = models.CharField(_("Numéro"), max_length=30, unique=True)
+    numero = models.CharField(_("Numéro"), max_length=30)
     depot_source = models.ForeignKey(
         'companies.Depot', on_delete=models.PROTECT,
         related_name='transferts_depart', verbose_name=_("Dépôt source"),
@@ -176,15 +178,26 @@ class TransfertStock(models.Model):
         verbose_name = _("Transfert de stock")
         verbose_name_plural = _("Transferts de stock")
         ordering = ['-created_at']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['company', 'numero'],
+                name='unique_transfert_stock_numero_per_company',
+            )
+        ]
 
     def __str__(self):
         return f"TRF-{self.numero} ({self.get_statut_display()})"
 
     def save(self, *args, **kwargs):
         if not self.numero:
-            from django.utils import timezone
-            count = TransfertStock.objects.filter(company=self.company).count() + 1
-            self.numero = f"TRF-{timezone.now().strftime('%Y%m')}-{count:04d}"
+            with transaction.atomic():
+                count = (
+                    TransfertStock.objects
+                    .select_for_update()
+                    .filter(company=self.company)
+                    .count() + 1
+                )
+                self.numero = f"TRF-{tz.now().strftime('%Y%m')}-{count:04d}"
         super().save(*args, **kwargs)
 
 
@@ -239,7 +252,7 @@ class Inventaire(models.Model):
     statut = models.CharField(
         _("Statut"), max_length=20, choices=Statut.choices, default=Statut.EN_COURS,
     )
-    numero = models.CharField(_("Numéro"), max_length=30, unique=True)
+    numero = models.CharField(_("Numéro"), max_length=30)
     notes = models.TextField(_("Notes"), blank=True)
     cree_par = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.PROTECT,
@@ -257,15 +270,26 @@ class Inventaire(models.Model):
         verbose_name = _("Inventaire")
         verbose_name_plural = _("Inventaires")
         ordering = ['-created_at']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['company', 'numero'],
+                name='unique_inventaire_numero_per_company',
+            )
+        ]
 
     def __str__(self):
         return f"{self.numero} — {self.depot} ({self.get_statut_display()})"
 
     def save(self, *args, **kwargs):
         if not self.numero:
-            from django.utils import timezone as tz
-            count = Inventaire.objects.filter(company=self.company).count() + 1
-            self.numero = f"INV-{tz.now().strftime('%Y%m')}-{count:04d}"
+            with transaction.atomic():
+                count = (
+                    Inventaire.objects
+                    .select_for_update()
+                    .filter(company=self.company)
+                    .count() + 1
+                )
+                self.numero = f"INV-{tz.now().strftime('%Y%m')}-{count:04d}"
         super().save(*args, **kwargs)
 
 

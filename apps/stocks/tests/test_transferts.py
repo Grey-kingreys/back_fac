@@ -191,9 +191,10 @@ class TestInventaireCreate:
         res = client_superviseur_a.post(INVENTAIRES_URL, {"depot": depot_a.id})
         assert res.status_code == status.HTTP_201_CREATED
 
-    def test_gestionnaire_refuse_creation(self, client_gestionnaire_a, depot_a):
+    def test_gestionnaire_peut_creer_inventaire(self, client_gestionnaire_a, depot_a):
+        """Le gestionnaire de stock peut initier un inventaire physique de son dépôt."""
         res = client_gestionnaire_a.post(INVENTAIRES_URL, {"depot": depot_a.id})
-        assert res.status_code == status.HTTP_403_FORBIDDEN
+        assert res.status_code == status.HTTP_201_CREATED
 
 
 # ─────────────────────────────────────────────────────────────────────────────

@@ -4,7 +4,7 @@ Client, ParametresFidelite, Commande, LigneCommande, Paiement
 """
 
 from django.conf import settings
-from django.db import models
+from django.db import models, transaction
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
@@ -105,7 +105,7 @@ class Commande(models.Model):
         null=True, blank=True,
         related_name='commandes', verbose_name=_("Client"),
     )
-    numero = models.CharField(_("Numéro"), max_length=30, unique=True)
+    numero = models.CharField(_("Numéro"), max_length=30)
     statut = models.CharField(
         _("Statut"), max_length=20, choices=Statut.choices, default=Statut.BROUILLON,
     )
@@ -142,14 +142,26 @@ class Commande(models.Model):
         verbose_name = _("Commande")
         verbose_name_plural = _("Commandes")
         ordering = ['-created_at']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['company', 'numero'],
+                name='unique_commande_numero_per_company',
+            )
+        ]
 
     def __str__(self):
         return self.numero
 
     def save(self, *args, **kwargs):
         if not self.numero:
-            count = Commande.objects.filter(company=self.company).count() + 1
-            self.numero = f"CMD-{timezone.now().strftime('%Y%m')}-{count:05d}"
+            with transaction.atomic():
+                count = (
+                    Commande.objects
+                    .select_for_update()
+                    .filter(company=self.company)
+                    .count() + 1
+                )
+                self.numero = f"CMD-{timezone.now().strftime('%Y%m')}-{count:05d}"
         super().save(*args, **kwargs)
 
     @property
@@ -295,7 +307,7 @@ class Devis(models.Model):
         Client, on_delete=models.SET_NULL,
         null=True, blank=True, related_name='devis', verbose_name=_("Client"),
     )
-    numero = models.CharField(_("Numéro"), max_length=30, unique=True)
+    numero = models.CharField(_("Numéro"), max_length=30)
     statut = models.CharField(
         _("Statut"), max_length=20, choices=Statut.choices, default=Statut.BROUILLON,
     )
@@ -317,14 +329,26 @@ class Devis(models.Model):
         verbose_name = _("Devis")
         verbose_name_plural = _("Devis")
         ordering = ['-created_at']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['company', 'numero'],
+                name='unique_devis_numero_per_company',
+            )
+        ]
 
     def __str__(self):
         return f"{self.numero} ({self.get_statut_display()})"
 
     def save(self, *args, **kwargs):
         if not self.numero:
-            count = Devis.objects.filter(company=self.company).count() + 1
-            self.numero = f"DEV-{timezone.now().strftime('%Y%m')}-{count:04d}"
+            with transaction.atomic():
+                count = (
+                    Devis.objects
+                    .select_for_update()
+                    .filter(company=self.company)
+                    .count() + 1
+                )
+                self.numero = f"DEV-{timezone.now().strftime('%Y%m')}-{count:04d}"
         super().save(*args, **kwargs)
 
 

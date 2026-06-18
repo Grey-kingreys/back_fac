@@ -132,7 +132,7 @@ class TestEntreeStock:
 class TestSortieStock:
 
     def test_gestionnaire_fait_sortie(self, client_gestionnaire_a, stock_a, produit_a, depot_a):
-        payload = {"depot": depot_a.id, "produit": produit_a.id, "quantite": "10"}
+        payload = {"depot": depot_a.id, "produit": produit_a.id, "quantite": "10", "motif": "Vente directe"}
         res = client_gestionnaire_a.post(SORTIE_URL, payload)
         assert res.status_code == status.HTTP_201_CREATED
         stock_a.refresh_from_db()
@@ -144,7 +144,7 @@ class TestSortieStock:
         assert res.status_code in (status.HTTP_400_BAD_REQUEST, status.HTTP_409_CONFLICT)
 
     def test_caissier_peut_faire_sortie(self, client_caissier_a, stock_a, produit_a, depot_a):
-        payload = {"depot": depot_a.id, "produit": produit_a.id, "quantite": "5"}
+        payload = {"depot": depot_a.id, "produit": produit_a.id, "quantite": "5", "motif": "Retrait caisse"}
         res = client_caissier_a.post(SORTIE_URL, payload)
         assert res.status_code == status.HTTP_201_CREATED
 
@@ -173,3 +173,84 @@ class TestMouvementStockList:
     def test_chauffeur_refuse(self, client_chauffeur_a):
         res = client_chauffeur_a.get(MOUVEMENTS_URL)
         assert res.status_code == status.HTTP_403_FORBIDDEN
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Règles universelles — Isolation dépôt pour le gestionnaire (M2)
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+@pytest.mark.django_db
+class TestIsolationDepotGestionnaire:
+    """Vérifie qu'un gestionnaire ne peut agir que sur son propre dépôt."""
+
+    def test_gestionnaire_refuse_entree_autre_depot(
+        self, client_gestionnaire_a, produit_a, depot_a2
+    ):
+        """Le gestionnaire_a est affecté à depot_a → il ne peut pas faire une entrée sur depot_a2."""
+        payload = {
+            "depot": depot_a2.id,
+            "produit": produit_a.id,
+            "quantite": "10",
+        }
+        res = client_gestionnaire_a.post(ENTREE_URL, payload)
+        assert res.status_code == status.HTTP_403_FORBIDDEN
+
+    def test_gestionnaire_accepte_entree_son_depot(
+        self, client_gestionnaire_a, produit_a, depot_a
+    ):
+        """Le gestionnaire_a peut faire une entrée sur son propre dépôt."""
+        payload = {
+            "depot": depot_a.id,
+            "produit": produit_a.id,
+            "quantite": "10",
+        }
+        res = client_gestionnaire_a.post(ENTREE_URL, payload)
+        assert res.status_code == status.HTTP_201_CREATED
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Règles universelles — Ajustements de stock (maker-checker §9 — séparation tâches)
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+@pytest.mark.django_db
+class TestAjustementMakerChecker:
+    """Vérifie que le demandeur d'un ajustement ne peut pas l'approuver lui-même."""
+
+    def _creer_ajustement(self, client, produit_a, depot_a):
+        payload = {
+            "depot": depot_a.id,
+            "produit": produit_a.id,
+            "quantite": "5",
+            "motif": "Correction inventaire",
+        }
+        res = client.post("/api/ajustements-stock/", payload)
+        assert res.status_code == status.HTTP_201_CREATED
+        return res.data["id"]
+
+    def test_gestionnaire_ne_peut_approuver_son_propre_ajustement(
+        self, client_gestionnaire_a, client_admin_a, produit_a, depot_a, stock_a
+    ):
+        """Le gestionnaire qui a demandé l'ajustement ne peut pas l'approuver (maker-checker)."""
+        ajustement_id = self._creer_ajustement(client_gestionnaire_a, produit_a, depot_a)
+        # Le gestionnaire tente d'approuver → doit être refusé
+        # (le gestionnaire n'a pas le rôle admin/superviseur, donc 403 rôle)
+        res = client_gestionnaire_a.post(f"/api/ajustements-stock/{ajustement_id}/approuver/")
+        assert res.status_code == status.HTTP_403_FORBIDDEN
+
+    def test_admin_ne_peut_approuver_son_propre_ajustement(
+        self, client_admin_a, produit_a, depot_a, stock_a
+    ):
+        """Un admin qui a lui-même créé l'ajustement ne peut pas l'approuver."""
+        ajustement_id = self._creer_ajustement(client_admin_a, produit_a, depot_a)
+        res = client_admin_a.post(f"/api/ajustements-stock/{ajustement_id}/approuver/")
+        assert res.status_code == status.HTTP_403_FORBIDDEN
+
+    def test_superviseur_peut_approuver_ajustement_gestionnaire(
+        self, client_gestionnaire_a, client_superviseur_a, produit_a, depot_a, stock_a
+    ):
+        """Le superviseur peut approuver un ajustement créé par le gestionnaire."""
+        ajustement_id = self._creer_ajustement(client_gestionnaire_a, produit_a, depot_a)
+        res = client_superviseur_a.post(f"/api/ajustements-stock/{ajustement_id}/approuver/")
+        assert res.status_code == status.HTTP_200_OK

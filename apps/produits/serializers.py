@@ -22,7 +22,7 @@ class CategorieSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Categorie
-        fields = ['id', 'name', 'description', 'couleur', 'is_active',
+        fields = ['id', 'name', 'description', 'couleur', 'tva_taux', 'is_active',
                   'nombre_produits', 'created_at']
         read_only_fields = ['id', 'nombre_produits', 'created_at']
 

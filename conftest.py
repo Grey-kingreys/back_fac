@@ -114,8 +114,18 @@ def admin_b(db, company_b):
 
 
 @pytest.fixture
-def superviseur_a(db, company_a):
-    return make_user("superviseur_a@test.com", Role.SUPERVISEUR, company=company_a)
+def superviseur_a(db, company_a, zone_a):
+    user = CustomUser.objects.create_user(
+        email="superviseur_a@test.com",
+        password="Pass1234!",
+        first_name="Test",
+        last_name="User",
+        role=Role.SUPERVISEUR,
+        company=company_a,
+        zone=zone_a,
+        is_active=True,
+    )
+    return user
 
 
 @pytest.fixture

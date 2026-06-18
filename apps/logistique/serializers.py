@@ -127,6 +127,10 @@ class MissionCreateSerializer(serializers.Serializer):
     chauffeur = serializers.IntegerField()
     depot_depart = serializers.IntegerField()
     depot_arrivee = serializers.IntegerField()
+    type_mission = serializers.ChoiceField(
+        choices=Mission.TypeMission.choices,
+        default=Mission.TypeMission.TRANSFERT,
+    )
     date_depart_prevue = serializers.DateTimeField(required=False, allow_null=True)
     notes = serializers.CharField(required=False, allow_blank=True)
     lignes = LigneMissionInputSerializer(many=True, required=False)
@@ -135,13 +139,26 @@ class MissionCreateSerializer(serializers.Serializer):
 
 class SignatureArriveeSerializer(serializers.Serializer):
     signature = serializers.CharField(
-        help_text="Canvas HTML5 encodé en base64")
+        required=False, allow_blank=True,
+        help_text="Canvas HTML5 encodé en base64. Vide si refus_signature=true.",
+    )
+    refus_signature = serializers.BooleanField(
+        default=False,
+        help_text="True si le destinataire refuse de signer → statut LITIGE immédiat.",
+    )
     quantites_recues = serializers.ListField(
         child=serializers.DictField(),
         required=False,
         help_text="[{ligne_id: N, quantite_recue: X}]",
     )
     motif_litige = serializers.CharField(required=False, allow_blank=True)
+
+    def validate(self, attrs):
+        if not attrs.get('refus_signature') and not attrs.get('signature'):
+            raise serializers.ValidationError(
+                {'signature': "La signature est obligatoire (sauf si refus_signature=true)."}
+            )
+        return attrs
 
 
 # ── Maintenance ───────────────────────────────────────────────────────────────

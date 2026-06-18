@@ -28,7 +28,7 @@ from rest_framework.response import Response
 from rest_framework.viewsets import GenericViewSet
 
 from apps.accounts.models import Role
-from apps.accounts.permissions import CompanyFilterMixin, HasRole, IsCompanyMember, IsSuperAdminBlocked
+from apps.accounts.permissions import CompanyFilterMixin, HasRole, IsCompanyMember, IsSuperAdminBlocked  # noqa: F401
 
 from .models import Depot, Zone
 from .serializers import (
@@ -85,9 +85,11 @@ class ZoneViewSet(CompanyObjectMixin, CompanyFilterMixin, GenericViewSet, ListMo
     """
     ViewSet de gestion des zones géographiques.
     Filtrées automatiquement par company via CompanyFilterMixin.
+    Le superviseur ne voit que sa propre zone (zone_lookup_field='pk').
     """
 
     queryset = Zone.objects.prefetch_related('depots').order_by('name')
+    zone_lookup_field = 'pk'
 
     def get_serializer_class(self):
         if self.action == 'list':
@@ -222,6 +224,9 @@ class DepotViewSet(CompanyObjectMixin, CompanyFilterMixin, GenericViewSet, ListM
         if not company:
             return qs.none()
         qs = qs.filter(zone__company=company)
+
+        if user.role == Role.SUPERVISEUR and user.zone:
+            qs = qs.filter(zone=user.zone)
 
         # Filtres query params
         zone = self.request.query_params.get('zone')

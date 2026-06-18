@@ -394,3 +394,154 @@ class TestConsommationCarburant:
     def test_isolation_company(self, client_admin_a, vehicule_a, vehicule_b):
         res = client_admin_a.get(CARBURANT_URL)
         assert res.status_code == status.HTTP_200_OK
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Règles universelles — Signature obligatoire (§7)
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+@pytest.mark.django_db
+class TestSignatureObligatoire:
+    """Vérifie la règle universelle §7 : signature obligatoire pour clôturer."""
+
+    def test_terminer_sans_signature_refuse(self, client_admin_a, mission_a):
+        """Une mission ne peut pas être terminée sans signature d'arrivée."""
+        from apps.logistique.models import Mission
+        mission_a.statut = Mission.Statut.ARRIVEE
+        mission_a.signature_arrivee = ""
+        mission_a.save(update_fields=["statut", "signature_arrivee"])
+        res = client_admin_a.post(mission_terminer_url(mission_a.id))
+        assert res.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_arrivee_sans_signature_ni_refus_refuse(self, client_admin_a, mission_a):
+        """L'endpoint arrivée doit refuser si ni signature ni refus_signature."""
+        from apps.logistique.models import Mission
+        mission_a.statut = Mission.Statut.EN_TRANSIT
+        mission_a.save(update_fields=["statut"])
+        res = client_admin_a.post(mission_arrivee_url(mission_a.id), {})
+        assert res.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_refus_signature_met_en_litige(self, client_admin_a, mission_a):
+        """Refus de signature → statut LITIGE."""
+        from apps.logistique.models import Mission
+        mission_a.statut = Mission.Statut.EN_TRANSIT
+        mission_a.save(update_fields=["statut"])
+        payload = {
+            "refus_signature": True,
+            "motif_litige": "Destinataire absent",
+        }
+        res = client_admin_a.post(mission_arrivee_url(mission_a.id), payload)
+        assert res.status_code == status.HTTP_200_OK
+        mission_a.refresh_from_db()
+        assert mission_a.statut == Mission.Statut.LITIGE
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Règles universelles — Transit nécessite rôle (M1)
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+@pytest.mark.django_db
+class TestTransitRoleRequired:
+    """Vérifie que transit() est protégé par rôle."""
+
+    def test_caissier_refuse_transit(self, client_caissier_a, mission_a):
+        from apps.logistique.models import Mission
+        mission_a.statut = Mission.Statut.CHARGEMENT
+        mission_a.save(update_fields=["statut"])
+        res = client_caissier_a.post(mission_transit_url(mission_a.id))
+        assert res.status_code == status.HTTP_403_FORBIDDEN
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Isolation multi-tenant — Maintenance / Panne / DocumentVehicule
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+@pytest.mark.django_db
+class TestIsolationMaintenanceCrossCompany:
+    """[I2] Un utilisateur ne peut pas créer une maintenance sur le véhicule d'une autre entreprise."""
+
+    def test_admin_a_ne_peut_pas_maintenir_vehicule_b(self, client_admin_a, vehicule_b):
+        payload = {
+            "vehicule": vehicule_b.id,
+            "type_maintenance": "preventive",
+            "description": "Test isolation",
+            "kilometrage_au_moment": 10000,
+            "cout": "0.00",
+            "statut": "planifiee",
+            "date_planifiee": "2026-07-01",
+        }
+        res = client_admin_a.post(MAINTENANCES_URL, payload, format="json")
+        assert res.status_code == status.HTTP_403_FORBIDDEN
+
+    def test_maintenancier_a_ne_peut_pas_maintenir_vehicule_b(
+        self, client_maintenancier_a, vehicule_b
+    ):
+        payload = {
+            "vehicule": vehicule_b.id,
+            "type_maintenance": "corrective",
+            "description": "Injection cross-company",
+            "kilometrage_au_moment": 5000,
+            "cout": "0.00",
+            "statut": "planifiee",
+            "date_planifiee": "2026-07-01",
+        }
+        res = client_maintenancier_a.post(MAINTENANCES_URL, payload, format="json")
+        assert res.status_code == status.HTTP_403_FORBIDDEN
+
+    def test_admin_a_ne_voit_pas_maintenances_vehicule_b(
+        self, client_admin_a, vehicule_b
+    ):
+        Maintenance.objects.create(
+            vehicule=vehicule_b,
+            type_maintenance=Maintenance.TypeMaintenance.PREVENTIVE,
+            description="Maintenance société B",
+            kilometrage_au_moment=0,
+            cout=0,
+            statut=Maintenance.Statut.PLANIFIEE,
+            date_planifiee="2026-07-01",
+        )
+        res = client_admin_a.get(MAINTENANCES_URL)
+        assert res.status_code == status.HTTP_200_OK
+        ids_vehicule = [m.get("vehicule") for m in res.data.get("results", [])]
+        assert vehicule_b.id not in ids_vehicule
+
+
+@pytest.mark.django_db
+class TestIsolationPanneCrossCompany:
+    """[I2] Un utilisateur ne peut pas déclarer une panne sur le véhicule d'une autre entreprise."""
+
+    def test_admin_a_ne_peut_pas_declarer_panne_vehicule_b(
+        self, client_admin_a, vehicule_b
+    ):
+        payload = {
+            "vehicule": vehicule_b.id,
+            "description": "Panne simulée cross-company",
+        }
+        res = client_admin_a.post(PANNES_URL, payload, format="json")
+        assert res.status_code == status.HTTP_403_FORBIDDEN
+
+    def test_chauffeur_a_ne_peut_pas_declarer_panne_vehicule_b(
+        self, client_chauffeur_a, vehicule_b
+    ):
+        payload = {
+            "vehicule": vehicule_b.id,
+            "description": "Panne cross-company chauffeur",
+        }
+        res = client_chauffeur_a.post(PANNES_URL, payload, format="json")
+        assert res.status_code == status.HTTP_403_FORBIDDEN
+
+    def test_admin_a_ne_voit_pas_pannes_vehicule_b(
+        self, client_admin_a, vehicule_b, admin_b
+    ):
+        Panne.objects.create(
+            vehicule=vehicule_b,
+            description="Panne société B",
+            declare_par=admin_b,
+        )
+        res = client_admin_a.get(PANNES_URL)
+        assert res.status_code == status.HTTP_200_OK
+        ids_vehicule = [p.get("vehicule") for p in res.data.get("results", [])]
+        assert vehicule_b.id not in ids_vehicule

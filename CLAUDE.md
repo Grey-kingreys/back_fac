@@ -1,8 +1,26 @@
 # DjoulaGest — Mémoire Backend
 
-**Dernière mise à jour :** 07/06/2026 — Tous les sprints 1→13 implémentés  
-**État CI :** makemigrations requis pour toutes les apps modifiées · 142 tests accounts + tests Sprint 12 écrits  
-**Deadline projet :** 20/06/2026 — **13 jours restants**
+**Dernière mise à jour :** 18/06/2026 — Audit complet + toutes corrections R-series appliquées  
+**État CI :** ⚠️ Migrations NON générées — voir tableau ci-dessous · 142 tests accounts + tests Sprint 12 écrits  
+**Deadline projet :** 20/06/2026 — **2 jours restants**
+
+---
+
+## ⚠️ Migrations en attente — À générer AVANT tout `docker compose up`
+
+```bash
+docker compose exec web python manage.py makemigrations finance accounts stocks ventes logistique produits
+docker compose exec web python manage.py migrate
+```
+
+| App | Champ(s) ajouté(s) |
+|-----|---------------------|
+| `finance` | `DepenseOperationnelle.is_deleted` (BooleanField) + `deleted_at` (DateTimeField null) |
+| `accounts` | `CustomUser.first_login_done` default=False (était True) |
+| `stocks` | `UniqueConstraint(company, numero)` sur `TransfertStock` + `Inventaire` |
+| `ventes` | `UniqueConstraint(company, numero)` sur `Commande` + `Devis` |
+| `logistique` | `UniqueConstraint(company, numero)` sur `Mission` |
+| `produits` | `UniqueConstraint(company, numero)` sur `CommandeFournisseur` |
 
 ---
 
@@ -28,7 +46,7 @@ Ne jamais utiliser `pip`, `python`, `isort`, `flake8` directement en local — i
 cd backend
 docker compose up --build
 # API dispo sur http://localhost:8001
-# Swagger : http://localhost:8001/api/schema/swagger-ui/
+# Swagger : http://localhost:8001/api/schema/docs/
 # ReDoc   : http://localhost:8001/api/schema/redoc/
 ```
 
@@ -470,6 +488,24 @@ Entièrement **commenté** dans `docker-compose.yml`. OTel installé. Pour activ
 | `apps/produits/serializers.py` L.196 | `CommandeFournisseurDetailSerializer` | `depot_nom = CharField(source='depot_destination.name')` |
 
 > ⚠️ **Règle à respecter :** Toujours vérifier `apps/companies/models.py` avant d'écrire un `source=` sur un champ de Zone ou Depot. Ces modèles sont en anglais. Les autres modèles métier (Produit, Fournisseur, Employe, Caisse*) sont en français.
+
+---
+
+## Corrections audit complet backend (17/06/2026)
+
+| # | Fichier(s) | Correction |
+|---|-----------|-----------|
+| E1 | `companies/models.py` + migration `0006` | `Zone.code` et `Depot.code` : `unique=True` global → `UniqueConstraint` scoped par company/zone — isolation SaaS |
+| E2 | `accounts/permissions.py` | `BaseCompanyPermission.has_permission()` : supprimé `if user.is_superadmin: return True` |
+| S5+V3+V5 | `accounts/permissions.py` | `CompanyFilterMixin` + `DepotFilterMixin` : ajout `check_permissions()` qui bloque le superadmin + suppression `if user.is_superadmin: return queryset` dans `get_queryset()` |
+| V1 | Tous les fichiers `views.py` (7 apps) | `IsSuperAdminBlocked` importé + ajouté dans **chaque** `get_permissions()` pour défense en profondeur |
+| — | `accounts/permissions.py` | `IsSupervisorOrAbove` : supprimé `Role.SUPERADMIN` des `allowed_roles` |
+| E3+S4 | `ventes/serializers.py` | `PaiementInputSerializer.validate()` + `CommandeCreateSerializer.validate()` : référence obligatoire pour Orange Money, MTN Money, Virement |
+| V4 | `finance/views.py` | `VersementCaisseViewSet.create()` : vérification que toutes les caisses appartiennent à la company de l'utilisateur |
+| S3 | `logistique/serializers.py` + `views.py` | `MissionCreateSerializer` : ajout champ `type_mission` + passé à `Mission.objects.create()` |
+| CI1 | `.github/workflows/backend-ci.yml` | Job lint : `pip install flake8 isort` → `pip install -r requirements.txt` (isort lit `setup.cfg`) |
+| CI2 | `.github/workflows/backend-ci.yml` | `RESEND_KEY` ajouté dans les 3 étapes env du job test |
+| U1 | `CLAUDE.md` | URL Swagger corrigée : `/api/schema/swagger-ui/` → `/api/schema/docs/` |
 
 ---
 

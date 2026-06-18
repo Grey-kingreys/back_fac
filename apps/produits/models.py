@@ -4,7 +4,7 @@ Modèles : Categorie, Unite, Fournisseur, Produit, CommandeFournisseur
 """
 
 from django.conf import settings
-from django.db import models
+from django.db import models, transaction
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
@@ -183,7 +183,7 @@ class CommandeFournisseur(models.Model):
         Fournisseur, on_delete=models.PROTECT,
         related_name='commandes', verbose_name=_("Fournisseur"),
     )
-    numero = models.CharField(_("Numéro"), max_length=30, unique=True)
+    numero = models.CharField(_("Numéro"), max_length=30)
     statut = models.CharField(
         _("Statut"), max_length=30, choices=Statut.choices, default=Statut.BROUILLON,
     )
@@ -205,14 +205,26 @@ class CommandeFournisseur(models.Model):
         verbose_name = _("Commande fournisseur")
         verbose_name_plural = _("Commandes fournisseurs")
         ordering = ['-created_at']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['company', 'numero'],
+                name='unique_commande_fournisseur_numero_per_company',
+            )
+        ]
 
     def __str__(self):
         return self.numero
 
     def save(self, *args, **kwargs):
         if not self.numero:
-            count = CommandeFournisseur.objects.filter(company=self.company).count() + 1
-            self.numero = f"CDF-{timezone.now().strftime('%Y%m')}-{count:04d}"
+            with transaction.atomic():
+                count = (
+                    CommandeFournisseur.objects
+                    .select_for_update()
+                    .filter(company=self.company)
+                    .count() + 1
+                )
+                self.numero = f"CDF-{timezone.now().strftime('%Y%m')}-{count:04d}"
         super().save(*args, **kwargs)
 
 

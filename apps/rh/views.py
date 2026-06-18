@@ -13,7 +13,7 @@ from rest_framework.response import Response
 from rest_framework.viewsets import GenericViewSet
 
 from apps.accounts.models import Role
-from apps.accounts.permissions import CompanyFilterMixin, HasRole
+from apps.accounts.permissions import CompanyFilterMixin, HasRole, IsSuperAdminBlocked
 
 from .models import Conge, Document, Employe, HistoriqueAffectation, ObjectifVente, Presence
 from .serializers import (
@@ -41,8 +41,8 @@ class EmployeViewSet(CompanyFilterMixin, GenericViewSet,
 
     def get_permissions(self):
         if self.action in ('list', 'retrieve'):
-            return [IsAuthenticated(), HasRole(RH_READ)]
-        return [IsAuthenticated(), HasRole(RH_WRITE)]
+            return [IsAuthenticated(), IsSuperAdminBlocked(), HasRole(RH_READ)]
+        return [IsAuthenticated(), IsSuperAdminBlocked(), HasRole(RH_WRITE)]
 
     def get_serializer_class(self):
         return EmployeListSerializer if self.action == 'list' else EmployeDetailSerializer
@@ -119,8 +119,8 @@ class PresenceViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
 
     def get_permissions(self):
         if self.action in ('list', 'retrieve'):
-            return [IsAuthenticated(), HasRole(RH_READ)]
-        return [IsAuthenticated(), HasRole(RH_WRITE)]
+            return [IsAuthenticated(), IsSuperAdminBlocked(), HasRole(RH_READ)]
+        return [IsAuthenticated(), IsSuperAdminBlocked(), HasRole(RH_WRITE)]
 
     def get_queryset(self):
         qs = Presence.objects.select_related('employe', 'enregistre_par').order_by('-date')
@@ -161,8 +161,8 @@ class CongeViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
 
     def get_permissions(self):
         if self.action in ('list', 'retrieve'):
-            return [IsAuthenticated(), HasRole(RH_READ)]
-        return [IsAuthenticated(), HasRole(RH_WRITE)]
+            return [IsAuthenticated(), IsSuperAdminBlocked(), HasRole(RH_READ)]
+        return [IsAuthenticated(), IsSuperAdminBlocked(), HasRole(RH_WRITE)]
 
     def get_queryset(self):
         qs = Conge.objects.select_related('employe', 'approuve_par').order_by('-date_debut')
@@ -216,8 +216,8 @@ class DocumentViewSet(CompanyFilterMixin, GenericViewSet,
 
     def get_permissions(self):
         if self.action in ('list', 'retrieve'):
-            return [IsAuthenticated(), HasRole(RH_READ)]
-        return [IsAuthenticated(), HasRole(RH_WRITE)]
+            return [IsAuthenticated(), IsSuperAdminBlocked(), HasRole(RH_READ)]
+        return [IsAuthenticated(), IsSuperAdminBlocked(), HasRole(RH_WRITE)]
 
     def get_queryset(self):
         qs = super().get_queryset()
@@ -273,8 +273,8 @@ class ObjectifVenteViewSet(CompanyFilterMixin, GenericViewSet,
 
     def get_permissions(self):
         if self.action in ('list', 'retrieve'):
-            return [IsAuthenticated(), HasRole(RH_READ)]
-        return [IsAuthenticated(), HasRole(RH_WRITE)]
+            return [IsAuthenticated(), IsSuperAdminBlocked(), HasRole(RH_READ)]
+        return [IsAuthenticated(), IsSuperAdminBlocked(), HasRole(RH_WRITE)]
 
     def create(self, request, *args, **kwargs):
         s = ObjectifVenteSerializer(data=request.data, context={'request': request})

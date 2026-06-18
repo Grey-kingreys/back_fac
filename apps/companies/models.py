@@ -1,4 +1,3 @@
-from django.conf import settings
 from django.db import models
 from django.utils.text import slugify
 from django.utils.translation import gettext_lazy as _
@@ -51,7 +50,7 @@ class Zone(models.Model):
         verbose_name=_("Entreprise"),
     )
     name = models.CharField(_("Nom"), max_length=150)
-    code = models.CharField(_("Code"), max_length=30, unique=True)
+    code = models.CharField(_("Code"), max_length=30)
     description = models.TextField(_("Description"), blank=True)
     is_active = models.BooleanField(_("Actif"), default=True)
 
@@ -84,7 +83,11 @@ class Zone(models.Model):
             models.UniqueConstraint(
                 fields=["company", "name"],
                 name="unique_zone_name_per_company",
-            )
+            ),
+            models.UniqueConstraint(
+                fields=["company", "code"],
+                name="unique_zone_code_per_company",
+            ),
         ]
 
     def __str__(self):
@@ -94,7 +97,8 @@ class Zone(models.Model):
 class Depot(models.Model):
     """
     Dépôt physique rattaché à une Zone.
-    Chaque dépôt aura sa propre caisse et ses propres stocks (releases futures).
+    Le gestionnaire est un utilisateur avec role=gestionnaire_stock affecté à ce dépôt
+    via son champ User.depot (pas de FK inverse sur le modèle Depot).
     """
     zone = models.ForeignKey(
         Zone,
@@ -103,14 +107,28 @@ class Depot(models.Model):
         verbose_name=_("Zone"),
     )
     name = models.CharField(_("Nom"), max_length=150)
-    code = models.CharField(_("Code"), max_length=30, unique=True)
+    code = models.CharField(_("Code"), max_length=30)
     address = models.TextField(_("Adresse"), blank=True)
     is_active = models.BooleanField(_("Actif"), default=True)
-    gestionnaire = models.ForeignKey(
-        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
-        null=True, blank=True,
-        related_name='depots_geres', verbose_name=_("Gestionnaire du dépôt"),
+
+    # ── Coordonnées GPS propres au dépôt (marqueur à l'intérieur de sa zone) ─
+    latitude = models.DecimalField(
+        _("Latitude"),
+        max_digits=9,
+        decimal_places=6,
+        null=True,
+        blank=True,
+        help_text="Latitude du dépôt (ex: 9.537500)",
     )
+    longitude = models.DecimalField(
+        _("Longitude"),
+        max_digits=9,
+        decimal_places=6,
+        null=True,
+        blank=True,
+        help_text="Longitude du dépôt (ex: -13.677300)",
+    )
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -122,7 +140,11 @@ class Depot(models.Model):
             models.UniqueConstraint(
                 fields=["zone", "name"],
                 name="unique_depot_name_per_zone",
-            )
+            ),
+            models.UniqueConstraint(
+                fields=["zone", "code"],
+                name="unique_depot_code_per_zone",
+            ),
         ]
 
     def __str__(self):

@@ -45,7 +45,13 @@ class CaissePhysique(models.Model):
     """
     Caisse physique liée à un dépôt.
     Une seule caisse par dépôt. Jamais supprimée, jamais réouverte.
+    La fermeture définitive (statut=FERMEE) est irréversible — règle universelle §1.
     """
+
+    class Statut(models.TextChoices):
+        OUVERTE = 'ouverte', _("Ouverte")
+        FERMEE = 'fermee', _("Fermée définitivement")
+
     company = models.ForeignKey(
         'companies.Company', on_delete=models.CASCADE,
         related_name='caisses', verbose_name=_("Entreprise"),
@@ -59,8 +65,12 @@ class CaissePhysique(models.Model):
     solde_actuel = models.DecimalField(
         _("Solde actuel (GNF)"), max_digits=16, decimal_places=2, default=0,
     )
+    statut = models.CharField(
+        _("Statut"), max_length=10, choices=Statut.choices, default=Statut.OUVERTE,
+    )
     is_active = models.BooleanField(_("Active"), default=True)
     created_at = models.DateTimeField(auto_now_add=True)
+    fermee_le = models.DateTimeField(_("Fermée le"), null=True, blank=True)
 
     class Meta:
         verbose_name = _("Caisse physique")
@@ -109,6 +119,12 @@ class SessionCaisse(models.Model):
         _("Motif écart"), blank=True,
         help_text="Obligatoire si écart != 0",
     )
+    fermee_par = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
+        null=True, blank=True, related_name='sessions_fermees',
+        verbose_name=_("Fermée par"),
+        help_text="Traçabilité : qui a fermé la session (caissier, admin ou superviseur).",
+    )
     ouvert_le = models.DateTimeField(_("Ouvert le"), auto_now_add=True)
     ferme_le = models.DateTimeField(_("Fermé le"), null=True, blank=True)
     notes = models.TextField(_("Notes"), blank=True)
@@ -121,7 +137,7 @@ class SessionCaisse(models.Model):
     def __str__(self):
         return f"Session {self.caisse} — {self.caissier} ({self.statut})"
 
-    def fermer(self, solde_reel, motif_ecart=''):
+    def fermer(self, solde_reel, motif_ecart='', fermee_par=None):
         from decimal import Decimal
         self.solde_fermeture_reel = Decimal(str(solde_reel))
         self.ecart = self.solde_fermeture_reel - (self.solde_fermeture_theorique or 0)
@@ -130,6 +146,7 @@ class SessionCaisse(models.Model):
         self.motif_ecart = motif_ecart
         self.statut = self.Statut.FERMEE
         self.ferme_le = timezone.now()
+        self.fermee_par = fermee_par
         self.save()
 
 
@@ -230,7 +247,8 @@ class TransactionMobileMoney(models.Model):
     )
     montant = models.DecimalField(_("Montant (GNF)"), max_digits=14, decimal_places=2)
     reference_operateur = models.CharField(
-        _("Référence opérateur"), max_length=100, blank=True,
+        _("Référence opérateur"), max_length=100,
+        help_text="ID de transaction obligatoire (Orange Money / MTN Money)",
     )
     reference_doc = models.CharField(
         _("Référence document interne"), max_length=50, blank=True,
@@ -253,7 +271,16 @@ class TransactionMobileMoney(models.Model):
 
 # ── Hiérarchie caisses : Zone + Entreprise ────────────────────────────────────
 class CaisseZone(models.Model):
-    """Caisse consolidée au niveau zone (agrège les CaissePhysique de ses dépôts)."""
+    """
+    Caisse consolidée au niveau zone (agrège les CaissePhysique de ses dépôts).
+    La fermeture définitive (statut=FERMEE) requiert que toutes les CaissePhysique de la zone
+    soient elles-mêmes fermées — règle universelle §5.
+    """
+
+    class Statut(models.TextChoices):
+        OUVERTE = 'ouverte', _("Ouverte")
+        FERMEE = 'fermee', _("Fermée définitivement")
+
     company = models.ForeignKey(
         'companies.Company', on_delete=models.CASCADE,
         related_name='caisses_zone', verbose_name=_("Entreprise"),
@@ -267,8 +294,12 @@ class CaisseZone(models.Model):
     solde_actuel = models.DecimalField(
         _("Solde actuel (GNF)"), max_digits=16, decimal_places=2, default=0,
     )
+    statut = models.CharField(
+        _("Statut"), max_length=10, choices=Statut.choices, default=Statut.OUVERTE,
+    )
     is_active = models.BooleanField(_("Active"), default=True)
     created_at = models.DateTimeField(auto_now_add=True)
+    fermee_le = models.DateTimeField(_("Fermée le"), null=True, blank=True)
 
     class Meta:
         verbose_name = _("Caisse zone")
@@ -408,6 +439,11 @@ class DepenseOperationnelle(models.Model):
         null=True, blank=True, related_name='depenses',
         verbose_name=_("Session caisse liée"),
     )
+    is_deleted = models.BooleanField(
+        _("Supprimée"), default=False,
+        help_text="Soft-delete — traçabilité §9 : la dépense n'est jamais physiquement supprimée.",
+    )
+    deleted_at = models.DateTimeField(_("Supprimée le"), null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

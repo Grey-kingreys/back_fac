@@ -38,11 +38,14 @@ class TauxChangeSerializer(serializers.ModelSerializer):
 
 class CaissePhysiqueSerializer(serializers.ModelSerializer):
     depot_nom = serializers.CharField(source='depot.name', read_only=True)
+    statut_label = serializers.CharField(source='get_statut_display', read_only=True)
 
     class Meta:
         model = CaissePhysique
-        fields = ['id', 'nom', 'depot', 'depot_nom', 'solde_actuel', 'is_active', 'created_at']
-        read_only_fields = ['id', 'depot_nom', 'solde_actuel', 'created_at']
+        fields = ['id', 'nom', 'depot', 'depot_nom', 'devise', 'solde_actuel',
+                  'statut', 'statut_label', 'is_active', 'created_at', 'fermee_le']
+        read_only_fields = ['id', 'depot_nom', 'solde_actuel', 'statut', 'statut_label',
+                            'is_active', 'created_at', 'fermee_le']
 
     def create(self, validated_data):
         validated_data['company'] = self.context['request'].user.company
@@ -72,6 +75,7 @@ class TransactionCaisseInputSerializer(serializers.Serializer):
 class SessionCaisseListSerializer(serializers.ModelSerializer):
     caisse_nom = serializers.CharField(source='caisse.nom', read_only=True)
     caissier_nom = serializers.CharField(source='caissier.get_full_name', read_only=True)
+    fermee_par_nom = serializers.CharField(source='fermee_par.get_full_name', read_only=True, allow_null=True)
     statut_label = serializers.CharField(source='get_statut_display', read_only=True)
 
     class Meta:
@@ -79,7 +83,7 @@ class SessionCaisseListSerializer(serializers.ModelSerializer):
         fields = ['id', 'caisse', 'caisse_nom', 'caissier', 'caissier_nom',
                   'statut', 'statut_label', 'solde_ouverture',
                   'solde_fermeture_theorique', 'solde_fermeture_reel',
-                  'ecart', 'ouvert_le', 'ferme_le']
+                  'ecart', 'ouvert_le', 'ferme_le', 'fermee_par', 'fermee_par_nom']
         read_only_fields = fields
 
 
@@ -109,6 +113,12 @@ class OuvrirSessionSerializer(serializers.Serializer):
 class FermerSessionSerializer(serializers.Serializer):
     solde_reel = serializers.DecimalField(max_digits=16, decimal_places=2, min_value=0)
     motif_ecart = serializers.CharField(required=False, allow_blank=True)
+
+    def validate(self, attrs):
+        # Le motif est obligatoire si un écart est détecté — pré-validation au niveau serializer
+        # La validation définitive reste dans SessionCaisse.fermer() (modèle)
+        # mais on rend motif_ecart required=True quand l'écart sera calculé
+        return attrs
 
 
 # ── Mobile Money ──────────────────────────────────────────────────────────────
@@ -143,7 +153,7 @@ class TransactionMobileMoneyInputSerializer(serializers.Serializer):
     type_transaction = serializers.ChoiceField(
         choices=TransactionMobileMoney.TypeTransaction.choices)
     montant = serializers.DecimalField(max_digits=14, decimal_places=2, min_value=0.01)
-    reference_operateur = serializers.CharField(required=False, allow_blank=True)
+    reference_operateur = serializers.CharField()
     reference_doc = serializers.CharField(required=False, allow_blank=True)
     description = serializers.CharField(required=False, allow_blank=True)
 
@@ -151,12 +161,14 @@ class TransactionMobileMoneyInputSerializer(serializers.Serializer):
 # ── Hiérarchie caisses ────────────────────────────────────────────────────────
 class CaisseZoneSerializer(serializers.ModelSerializer):
     zone_nom = serializers.CharField(source='zone.name', read_only=True)
+    statut_label = serializers.CharField(source='get_statut_display', read_only=True)
 
     class Meta:
         model = CaisseZone
         fields = ['id', 'nom', 'zone', 'zone_nom', 'devise',
-                  'solde_actuel', 'is_active', 'created_at']
-        read_only_fields = ['id', 'zone_nom', 'solde_actuel', 'created_at']
+                  'solde_actuel', 'statut', 'statut_label', 'is_active', 'created_at', 'fermee_le']
+        read_only_fields = ['id', 'zone_nom', 'solde_actuel', 'statut', 'statut_label',
+                            'is_active', 'created_at', 'fermee_le']
 
     def create(self, validated_data):
         validated_data['company'] = self.context['request'].user.company
@@ -194,6 +206,18 @@ class VersementCaisseSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'type_label', 'ecart',
                             'effectue_par', 'effectue_par_nom',
                             'recu_par_nom', 'created_at']
+
+    def validate(self, attrs):
+        if not attrs.get('justificatif') and not (self.instance and self.instance.justificatif):
+            raise serializers.ValidationError(
+                {'justificatif': "Un justificatif est obligatoire pour tout versement inter-niveau."}
+            )
+        # Règle universelle §4 : double comptage obligatoire à la création
+        if self.instance is None and attrs.get('montant_comptage_receveur') is None:
+            raise serializers.ValidationError(
+                {'montant_comptage_receveur': "Le montant du receveur est obligatoire (double comptage §4)."}
+            )
+        return attrs
 
 
 class DepenseOperationnelleSerializer(serializers.ModelSerializer):

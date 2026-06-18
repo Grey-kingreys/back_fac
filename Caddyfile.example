@@ -1,0 +1,24 @@
+# Copier ce fichier en "Caddyfile" et adapter selon l'environnement.
+# Le Caddyfile réel est dans .gitignore (comme .env) — ne pas le versionner.
+#
+# Développement local  →  remplacer {$DOMAIN} par "localhost"
+# Production VPS       →  remplacer {$DOMAIN} par votre domaine (ex: gestion.kingreys.fr)
+#                         Caddy gère le certificat Let's Encrypt automatiquement.
+
+{$DOMAIN} {
+
+    # Fichiers statiques Django
+    handle /static/* {
+        root * /srv
+        file_server
+    }
+
+    # Fichiers media (uploads)
+    handle /media/* {
+        root * /srv
+        file_server
+    }
+
+    # Tout le reste → Django (gunicorn)
+    reverse_proxy backend:8000
+}

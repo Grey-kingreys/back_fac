@@ -9,6 +9,8 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.viewsets import GenericViewSet
 
+from apps.accounts.permissions import IsSuperAdminBlocked
+
 from .models import Notification
 from .serializers import NotificationSerializer
 
@@ -19,7 +21,7 @@ class NotificationViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
     serializer_class = NotificationSerializer
 
     def get_permissions(self):
-        return [IsAuthenticated()]
+        return [IsAuthenticated(), IsSuperAdminBlocked()]
 
     def get_queryset(self):
         qs = Notification.objects.filter(

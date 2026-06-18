@@ -9,7 +9,7 @@ from drf_spectacular.openapi import OpenApiTypes
 from drf_spectacular.utils import extend_schema
 from rest_framework import status
 from rest_framework.decorators import action
-from rest_framework.exceptions import ValidationError
+from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.mixins import ListModelMixin, RetrieveModelMixin
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -17,7 +17,7 @@ from rest_framework.views import APIView
 from rest_framework.viewsets import GenericViewSet
 
 from apps.accounts.models import Role
-from apps.accounts.permissions import CompanyFilterMixin, HasRole
+from apps.accounts.permissions import CompanyFilterMixin, HasRole, IsSuperAdminBlocked
 
 from .models import (
     CaisseEntreprise,
@@ -64,8 +64,8 @@ class TauxChangeViewSet(CompanyFilterMixin, GenericViewSet,
 
     def get_permissions(self):
         if self.action in ('list', 'retrieve'):
-            return [IsAuthenticated(), HasRole(FINANCE_READ)]
-        return [IsAuthenticated(), HasRole(FINANCE_WRITE)]
+            return [IsAuthenticated(), IsSuperAdminBlocked(), HasRole(FINANCE_READ)]
+        return [IsAuthenticated(), IsSuperAdminBlocked(), HasRole(FINANCE_WRITE)]
 
     def create(self, request, *args, **kwargs):
         s = TauxChangeSerializer(data=request.data, context={'request': request})
@@ -82,17 +82,45 @@ class CaissePhysiqueViewSet(CompanyFilterMixin, GenericViewSet,
 
     queryset = CaissePhysique.objects.select_related('depot').order_by('nom')
     serializer_class = CaissePhysiqueSerializer
+    zone_lookup_field = 'depot__zone'
 
     def get_permissions(self):
         if self.action in ('list', 'retrieve'):
-            return [IsAuthenticated(), HasRole(FINANCE_READ)]
-        return [IsAuthenticated(), HasRole(FINANCE_WRITE)]
+            return [IsAuthenticated(), IsSuperAdminBlocked(), HasRole(FINANCE_READ)]
+        return [IsAuthenticated(), IsSuperAdminBlocked(), HasRole(FINANCE_WRITE)]
 
     def create(self, request, *args, **kwargs):
         s = CaissePhysiqueSerializer(data=request.data, context={'request': request})
         s.is_valid(raise_exception=True)
         s.save()
         return Response(s.data, status=status.HTTP_201_CREATED)
+
+    @extend_schema(
+        summary="Fermer définitivement une caisse physique",
+        description=(
+            "Fermeture irréversible. Impossible si une session est encore ouverte "
+            "sur cette caisse (règle universelle §1 et §5)."
+        ),
+    )
+    @action(detail=True, methods=['post'], url_path='fermer',
+            permission_classes=[IsAuthenticated, HasRole([Role.ADMIN])])
+    def fermer(self, request, pk=None):
+        caisse = self.get_object()
+        if caisse.statut == CaissePhysique.Statut.FERMEE:
+            raise ValidationError("Cette caisse est déjà fermée définitivement.")
+        sessions_ouvertes = SessionCaisse.objects.filter(
+            caisse=caisse, statut=SessionCaisse.Statut.OUVERTE
+        ).exists()
+        if sessions_ouvertes:
+            raise ValidationError(
+                "Impossible de fermer cette caisse : une session est encore ouverte."
+            )
+        caisse.statut = CaissePhysique.Statut.FERMEE
+        from django.utils import timezone as tz
+        caisse.fermee_le = tz.now()
+        caisse.is_active = False
+        caisse.save(update_fields=['statut', 'fermee_le', 'is_active'])
+        return Response(CaissePhysiqueSerializer(caisse).data)
 
 
 # ── Sessions caisse ───────────────────────────────────────────────────────────
@@ -101,14 +129,14 @@ class CaissePhysiqueViewSet(CompanyFilterMixin, GenericViewSet,
 class SessionCaisseViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
 
     def get_permissions(self):
-        return [IsAuthenticated(), HasRole(FINANCE_READ)]
+        return [IsAuthenticated(), IsSuperAdminBlocked(), HasRole(FINANCE_READ)]
 
     def get_serializer_class(self):
         return SessionCaisseListSerializer if self.action == 'list' else SessionCaisseDetailSerializer
 
     def get_queryset(self):
         qs = SessionCaisse.objects.select_related(
-            'caisse__depot', 'caissier'
+            'caisse__depot__zone', 'caissier', 'fermee_par'
         ).prefetch_related('transactions').order_by('-ouvert_le')
 
         user = self.request.user
@@ -116,6 +144,13 @@ class SessionCaisseViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
         if not company:
             return qs.none()
         qs = qs.filter(caisse__company=company)
+
+        if user.role == Role.SUPERVISEUR:
+            if not user.zone:
+                return qs.none()
+            qs = qs.filter(caisse__depot__zone=user.zone)
+        elif user.role == Role.CAISSIER:
+            qs = qs.filter(caissier=user)
 
         caisse = self.request.query_params.get('caisse')
         statut = self.request.query_params.get('statut')
@@ -126,7 +161,8 @@ class SessionCaisseViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
         return qs
 
     @extend_schema(summary="Ouvrir une session de caisse")
-    @action(detail=False, methods=['post'], url_path='ouvrir')
+    @action(detail=False, methods=['post'], url_path='ouvrir',
+            permission_classes=[IsAuthenticated, HasRole([Role.CAISSIER, Role.ADMIN])])
     def ouvrir(self, request):
         s = OuvrirSessionSerializer(data=request.data)
         s.is_valid(raise_exception=True)
@@ -140,6 +176,12 @@ class SessionCaisseViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
             )
         except CaissePhysique.DoesNotExist:
             raise ValidationError({'caisse': "Caisse introuvable ou inactive."})
+
+        # Le superviseur ne peut ouvrir que dans sa zone
+        user = request.user
+        if user.role == Role.SUPERVISEUR:
+            if not user.zone or caisse.depot.zone != user.zone:
+                raise PermissionDenied("Vous ne pouvez intervenir que sur les caisses de votre zone.")
 
         session_ouverte = SessionCaisse.objects.filter(
             caisse=caisse, statut=SessionCaisse.Statut.OUVERTE
@@ -161,9 +203,21 @@ class SessionCaisseViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
         )
 
     @extend_schema(summary="Fermer une session de caisse")
-    @action(detail=True, methods=['post'], url_path='fermer')
+    @action(detail=True, methods=['post'], url_path='fermer',
+            permission_classes=[IsAuthenticated, HasRole(FINANCE_READ)])
     def fermer(self, request, pk=None):
         session = self.get_object()
+        user = request.user
+
+        # Règle : seul le caissier de la session, l'admin, ou le superviseur de la même zone
+        if user.role == Role.CAISSIER and session.caissier != user:
+            raise PermissionDenied("Vous ne pouvez fermer que votre propre session de caisse.")
+        if user.role == Role.SUPERVISEUR:
+            if not user.zone:
+                raise PermissionDenied("Votre compte superviseur n'est pas assigné à une zone.")
+            if session.caisse.depot.zone != user.zone:
+                raise PermissionDenied("Vous ne pouvez intervenir que sur les sessions de votre zone.")
+
         if session.statut == SessionCaisse.Statut.FERMEE:
             raise ValidationError("Cette session est déjà fermée.")
 
@@ -190,10 +244,17 @@ class SessionCaisseViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
         session.solde_fermeture_theorique = session.solde_ouverture + total_entrees - total_sorties
         session.save(update_fields=['solde_fermeture_theorique'])
 
+        ecart = d['solde_reel'] - session.solde_fermeture_theorique
+        if ecart != 0 and not d.get('motif_ecart'):
+            raise ValidationError(
+                {'motif_ecart': "Un motif est obligatoire lorsqu'il y a un écart de caisse."}
+            )
+
         try:
             session.fermer(
                 solde_reel=d['solde_reel'],
                 motif_ecart=d.get('motif_ecart', ''),
+                fermee_par=request.user,
             )
         except ValueError as e:
             raise ValidationError(str(e))
@@ -244,11 +305,12 @@ class CompteMobileMoneyViewSet(CompanyFilterMixin, GenericViewSet,
 
     queryset = CompteMobileMoney.objects.select_related('depot').order_by('operateur')
     serializer_class = CompteMobileMoneySerializer
+    zone_lookup_field = 'depot__zone'
 
     def get_permissions(self):
         if self.action in ('list', 'retrieve', 'transactions'):
-            return [IsAuthenticated(), HasRole(FINANCE_READ)]
-        return [IsAuthenticated(), HasRole(FINANCE_WRITE)]
+            return [IsAuthenticated(), IsSuperAdminBlocked(), HasRole(FINANCE_READ)]
+        return [IsAuthenticated(), IsSuperAdminBlocked(), HasRole(FINANCE_WRITE)]
 
     def create(self, request, *args, **kwargs):
         s = CompteMobileMoneySerializer(data=request.data, context={'request': request})
@@ -300,17 +362,48 @@ class CaisseZoneViewSet(CompanyFilterMixin, GenericViewSet,
 
     queryset = CaisseZone.objects.select_related('zone').order_by('nom')
     serializer_class = CaisseZoneSerializer
+    zone_lookup_field = 'zone'
 
     def get_permissions(self):
         if self.action in ('list', 'retrieve'):
-            return [IsAuthenticated(), HasRole(FINANCE_READ)]
-        return [IsAuthenticated(), HasRole(FINANCE_WRITE)]
+            return [IsAuthenticated(), IsSuperAdminBlocked(), HasRole(FINANCE_READ)]
+        return [IsAuthenticated(), IsSuperAdminBlocked(), HasRole(FINANCE_WRITE)]
 
     def create(self, request, *args, **kwargs):
         s = CaisseZoneSerializer(data=request.data, context={'request': request})
         s.is_valid(raise_exception=True)
         s.save()
         return Response(s.data, status=status.HTTP_201_CREATED)
+
+    @extend_schema(
+        summary="Fermer définitivement une caisse zone",
+        description=(
+            "Fermeture irréversible. Impossible si une CaissePhysique de la zone "
+            "est encore ouverte (règle universelle §5)."
+        ),
+    )
+    @action(detail=True, methods=['post'], url_path='fermer',
+            permission_classes=[IsAuthenticated, HasRole([Role.ADMIN])])
+    def fermer(self, request, pk=None):
+        caisse_zone = self.get_object()
+        if caisse_zone.statut == CaisseZone.Statut.FERMEE:
+            raise ValidationError("Cette caisse zone est déjà fermée définitivement.")
+        caisses_physiques_ouvertes = CaissePhysique.objects.filter(
+            company=caisse_zone.company,
+            depot__zone=caisse_zone.zone,
+            statut=CaissePhysique.Statut.OUVERTE,
+        ).exists()
+        if caisses_physiques_ouvertes:
+            raise ValidationError(
+                "Impossible de fermer cette caisse zone : "
+                "des caisses physiques de la zone sont encore ouvertes."
+            )
+        caisse_zone.statut = CaisseZone.Statut.FERMEE
+        from django.utils import timezone as tz
+        caisse_zone.fermee_le = tz.now()
+        caisse_zone.is_active = False
+        caisse_zone.save(update_fields=['statut', 'fermee_le', 'is_active'])
+        return Response(CaisseZoneSerializer(caisse_zone).data)
 
 
 # ── Caisse Entreprise ─────────────────────────────────────────────────────────
@@ -321,7 +414,7 @@ class CaisseEntrepriseViewSet(GenericViewSet, RetrieveModelMixin):
     serializer_class = CaisseEntrepriseSerializer
 
     def get_permissions(self):
-        return [IsAuthenticated(), HasRole(FINANCE_READ)]
+        return [IsAuthenticated(), IsSuperAdminBlocked(), HasRole(FINANCE_READ)]
 
     def get_queryset(self):
         user = self.request.user
@@ -345,8 +438,8 @@ class VersementCaisseViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin)
 
     def get_permissions(self):
         if self.action in ('list', 'retrieve'):
-            return [IsAuthenticated(), HasRole(FINANCE_READ)]
-        return [IsAuthenticated(), HasRole(FINANCE_WRITE)]
+            return [IsAuthenticated(), IsSuperAdminBlocked(), HasRole(FINANCE_READ)]
+        return [IsAuthenticated(), IsSuperAdminBlocked(), HasRole(FINANCE_WRITE)]
 
     def get_queryset(self):
         qs = VersementCaisse.objects.select_related(
@@ -362,12 +455,40 @@ class VersementCaisseViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin)
             models.Q(caisse_source_depot__company=company) |
             models.Q(caisse_source_zone__company=company)
         )
+        if user.role == Role.SUPERVISEUR:
+            if not user.zone:
+                return qs.none()
+            qs = qs.filter(
+                models.Q(caisse_source_depot__depot__zone=user.zone) |
+                models.Q(caisse_source_zone__zone=user.zone)
+            )
         return qs
 
     def create(self, request, *args, **kwargs):
         s = VersementCaisseSerializer(data=request.data, context={'request': request})
         s.is_valid(raise_exception=True)
         d = s.validated_data
+        company = request.user.company
+
+        # Vérifier que toutes les caisses appartiennent à la company de l'utilisateur
+        src_depot = d.get('caisse_source_depot')
+        src_zone = d.get('caisse_source_zone')
+        dst_zone = d.get('caisse_dest_zone')
+        dst_ent = d.get('caisse_dest_entreprise')
+        caisses = [c for c in [src_depot, src_zone, dst_zone, dst_ent] if c is not None]
+        for caisse in caisses:
+            if caisse.company != company:
+                raise ValidationError("Vous ne pouvez effectuer des versements qu'entre les caisses de votre entreprise.")
+
+        # Règle universelle §1 : versement interdit depuis une caisse définitivement fermée
+        if src_depot and src_depot.statut == CaissePhysique.Statut.FERMEE:
+            raise ValidationError(
+                "Impossible d'effectuer un versement depuis une caisse physique fermée définitivement."
+            )
+        if src_zone and src_zone.statut == CaisseZone.Statut.FERMEE:
+            raise ValidationError(
+                "Impossible d'effectuer un versement depuis une caisse zone fermée définitivement."
+            )
 
         with transaction.atomic():
             versement = VersementCaisse.objects.create(
@@ -375,23 +496,19 @@ class VersementCaisseViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin)
             # Mettre à jour les soldes des caisses
             montant = d['montant']
             if d['type_versement'] == VersementCaisse.TypeVersement.DEPOT_VERS_ZONE:
-                if d.get('caisse_source_depot'):
-                    src = d['caisse_source_depot']
-                    src.solde_actuel -= montant
-                    src.save(update_fields=['solde_actuel'])
-                if d.get('caisse_dest_zone'):
-                    dst = d['caisse_dest_zone']
-                    dst.solde_actuel += montant
-                    dst.save(update_fields=['solde_actuel'])
+                if src_depot:
+                    src_depot.solde_actuel -= montant
+                    src_depot.save(update_fields=['solde_actuel'])
+                if dst_zone:
+                    dst_zone.solde_actuel += montant
+                    dst_zone.save(update_fields=['solde_actuel'])
             elif d['type_versement'] == VersementCaisse.TypeVersement.ZONE_VERS_ENTREPRISE:
-                if d.get('caisse_source_zone'):
-                    src = d['caisse_source_zone']
-                    src.solde_actuel -= montant
-                    src.save(update_fields=['solde_actuel'])
-                if d.get('caisse_dest_entreprise'):
-                    dst = d['caisse_dest_entreprise']
-                    dst.solde_actuel += montant
-                    dst.save(update_fields=['solde_actuel'])
+                if src_zone:
+                    src_zone.solde_actuel -= montant
+                    src_zone.save(update_fields=['solde_actuel'])
+                if dst_ent:
+                    dst_ent.solde_actuel += montant
+                    dst_ent.save(update_fields=['solde_actuel'])
 
         return Response(VersementCaisseSerializer(versement).data,
                         status=status.HTTP_201_CREATED)
@@ -404,18 +521,22 @@ class DepenseOperationnelleViewSet(GenericViewSet, ListModelMixin, RetrieveModel
 
     def get_permissions(self):
         if self.action in ('list', 'retrieve'):
-            return [IsAuthenticated(), HasRole(FINANCE_READ)]
-        return [IsAuthenticated(), HasRole(FINANCE_WRITE)]
+            return [IsAuthenticated(), IsSuperAdminBlocked(), HasRole(FINANCE_READ)]
+        return [IsAuthenticated(), IsSuperAdminBlocked(), HasRole(FINANCE_WRITE)]
 
     def get_queryset(self):
         qs = DepenseOperationnelle.objects.select_related(
-            'company', 'depot', 'enregistre_par'
-        ).order_by('-date_depense')
+            'company', 'depot__zone', 'enregistre_par'
+        ).filter(is_deleted=False).order_by('-date_depense')
         user = self.request.user
         company = user.company
         if not company:
             return qs.none()
         qs = qs.filter(company=company)
+        if user.role == Role.SUPERVISEUR:
+            if not user.zone:
+                return qs.none()
+            qs = qs.filter(depot__zone=user.zone)
         categorie = self.request.query_params.get('categorie')
         depot = self.request.query_params.get('depot')
         date_debut = self.request.query_params.get('date_debut')
@@ -445,8 +566,11 @@ class DepenseOperationnelleViewSet(GenericViewSet, ListModelMixin, RetrieveModel
         return Response(s.data)
 
     def destroy(self, request, *args, **kwargs):
+        from django.utils import timezone as tz
         obj = self.get_object()
-        obj.delete()
+        obj.is_deleted = True
+        obj.deleted_at = tz.now()
+        obj.save(update_fields=['is_deleted', 'deleted_at'])
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
@@ -455,10 +579,9 @@ class DepenseOperationnelleViewSet(GenericViewSet, ListModelMixin, RetrieveModel
 @extend_schema(tags=["Finance — Consolidation"])
 class ConsolidationCaissesView(APIView):
     """Vue consolidée des soldes de tous les niveaux de caisses."""
-    permission_classes = [IsAuthenticated]
 
     def get_permissions(self):
-        return [IsAuthenticated(), HasRole(FINANCE_READ)]
+        return [IsAuthenticated(), IsSuperAdminBlocked(), HasRole(FINANCE_READ)]
 
     @extend_schema(summary="Soldes consolidés — tous niveaux de caisses", responses={200: OpenApiTypes.OBJECT})
     def get(self, request):
@@ -468,9 +591,17 @@ class ConsolidationCaissesView(APIView):
 
         from django.db.models import Sum
 
+        user = request.user
         caisses_depot = CaissePhysique.objects.filter(company=company)
         caisses_zone = CaisseZone.objects.filter(company=company)
         caisse_ent = CaisseEntreprise.objects.filter(company=company)
+
+        if user.role == Role.SUPERVISEUR:
+            if not user.zone:
+                return Response({'detail': "Superviseur non assigné à une zone."}, status=403)
+            caisses_depot = caisses_depot.filter(depot__zone=user.zone)
+            caisses_zone = caisses_zone.filter(zone=user.zone)
+            caisse_ent = CaisseEntreprise.objects.none()
 
         return Response({
             'caisse_entreprise': [

@@ -6,7 +6,7 @@ Flotte véhicules, missions de transport, positions GPS, signatures.
 import uuid
 
 from django.conf import settings
-from django.db import models
+from django.db import models, transaction
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
@@ -82,11 +82,16 @@ class Mission(models.Model):
         TERMINEE = 'terminee', _("Terminée")
         ANNULEE = 'annulee', _("Annulée")
 
+    class TypeMission(models.TextChoices):
+        TRANSFERT = 'transfert', _("Transfert inter-dépôt")
+        LIVRAISON = 'livraison', _("Livraison client")
+        ENLEVEMENT = 'enlevement', _("Enlèvement fournisseur")
+
     company = models.ForeignKey(
         'companies.Company', on_delete=models.CASCADE,
         related_name='missions', verbose_name=_("Entreprise"),
     )
-    numero = models.CharField(_("Numéro"), max_length=30, unique=True)
+    numero = models.CharField(_("Numéro"), max_length=30)
     qr_code = models.UUIDField(
         _("QR Code"), default=uuid.uuid4, unique=True, editable=False,
     )
@@ -108,6 +113,10 @@ class Mission(models.Model):
     )
     statut = models.CharField(
         _("Statut"), max_length=20, choices=Statut.choices, default=Statut.PLANIFIEE,
+    )
+    type_mission = models.CharField(
+        _("Type de mission"), max_length=20, choices=TypeMission.choices,
+        default=TypeMission.TRANSFERT,
     )
     transfert_stock = models.OneToOneField(
         'stocks.TransfertStock', on_delete=models.SET_NULL,
@@ -134,14 +143,26 @@ class Mission(models.Model):
         verbose_name = _("Mission")
         verbose_name_plural = _("Missions")
         ordering = ['-created_at']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['company', 'numero'],
+                name='unique_mission_numero_per_company',
+            )
+        ]
 
     def __str__(self):
         return self.numero
 
     def save(self, *args, **kwargs):
         if not self.numero:
-            count = Mission.objects.filter(company=self.company).count() + 1
-            self.numero = f"MSN-{timezone.now().strftime('%Y%m')}-{count:04d}"
+            with transaction.atomic():
+                count = (
+                    Mission.objects
+                    .select_for_update()
+                    .filter(company=self.company)
+                    .count() + 1
+                )
+                self.numero = f"MSN-{timezone.now().strftime('%Y%m')}-{count:04d}"
         super().save(*args, **kwargs)
 
 

@@ -56,11 +56,12 @@ class TestIsCompanyMember:
         req = make_request(admin_a)
         assert perm.has_object_permission(req, None, zone_b) is False
 
-    def test_superadmin_acces_toutes_companies(self, superadmin, zone_a, zone_b):
+    def test_superadmin_bloque_sur_donnees_metier(self, superadmin, zone_a, zone_b):
+        """Le superadmin n'a pas de company → accès refusé aux données métier (isolation SaaS §8)."""
         perm = IsCompanyMember()
         req = make_request(superadmin)
-        assert perm.has_object_permission(req, None, zone_a) is True
-        assert perm.has_object_permission(req, None, zone_b) is True
+        assert perm.has_object_permission(req, None, zone_a) is False
+        assert perm.has_object_permission(req, None, zone_b) is False
 
     def test_user_sans_company_refuse(self, db):
         user = CustomUser.objects.create_user(
@@ -133,14 +134,15 @@ class TestCompanyFilterMixin:
         assert zone_a in qs
         assert zone_b not in qs
 
-    def test_superadmin_voit_tout(self, superadmin, zone_a, zone_b):
+    def test_superadmin_voit_rien(self, superadmin, zone_a, zone_b):
+        """Le superadmin n'a pas de company → voit 0 données (isolation SaaS §8)."""
         req = make_request(superadmin)
         mixin = CompanyFilterMixin()
         mixin.request = req
         mixin.queryset = Zone.objects.all()
         qs = mixin.get_queryset()
-        assert zone_a in qs
-        assert zone_b in qs
+        assert zone_a not in qs
+        assert zone_b not in qs
 
     def test_user_sans_company_voit_rien(self, db, zone_a, zone_b):
         user = CustomUser.objects.create_user(
@@ -182,7 +184,8 @@ class TestPermissionsComposees:
     def test_is_admin_or_superadmin(self, admin_a, superviseur_a, commercial_a, superadmin):
         perm = IsAdminOrSuperAdmin()
         assert perm.has_permission(make_request(admin_a), None) is True
-        assert perm.has_permission(make_request(superadmin), None) is True
+        # Superadmin gère la plateforme, pas les opérations métier (isolation SaaS §8)
+        assert perm.has_permission(make_request(superadmin), None) is False
         assert perm.has_permission(make_request(superviseur_a), None) is False
         assert perm.has_permission(make_request(commercial_a), None) is False
 
@@ -190,5 +193,6 @@ class TestPermissionsComposees:
         perm = IsSupervisorOrAbove()
         assert perm.has_permission(make_request(superviseur_a), None) is True
         assert perm.has_permission(make_request(admin_a), None) is True
-        assert perm.has_permission(make_request(superadmin), None) is True
+        # Superadmin gère la plateforme, pas les opérations métier (isolation SaaS §8)
+        assert perm.has_permission(make_request(superadmin), None) is False
         assert perm.has_permission(make_request(commercial_a), None) is False

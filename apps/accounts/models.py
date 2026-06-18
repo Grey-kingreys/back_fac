@@ -85,6 +85,16 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
         verbose_name="Dépôt",
     )
 
+    zone = models.ForeignKey(
+        'companies.Zone',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='superviseurs',
+        verbose_name="Zone",
+        help_text="Renseigné pour les Superviseurs (responsable de zone).",
+    )
+
     # ── Rôle ─────────────────────────────────────────────────────────────────
     role = models.CharField(
         max_length=30,
@@ -120,10 +130,10 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
     )
 
     first_login_done = models.BooleanField(
-        default=True,
+        default=False,
         verbose_name="Première connexion effectuée",
         help_text=(
-            "False pour les Admins créés par le SuperAdmin, "
+            "False pour les utilisateurs créés par l'Admin ou le SuperAdmin, "
             "jusqu'à ce qu'ils définissent leur mot de passe via le lien email."
         )
     )
@@ -212,3 +222,14 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
                 raise ValidationError(
                     "Le dépôt doit appartenir à la même entreprise que l'utilisateur."
                 )
+
+        if self.zone_id and self.company_id:
+            if self.zone.company_id != self.company_id:
+                raise ValidationError(
+                    "La zone doit appartenir à la même entreprise que l'utilisateur."
+                )
+
+        if self.role == Role.SUPERVISEUR and not self.zone_id:
+            raise ValidationError(
+                "Un superviseur doit obligatoirement être assigné à une zone."
+            )

@@ -4,6 +4,9 @@ apps/stocks/serializers.py
 
 from rest_framework import serializers
 
+from apps.companies.models import Depot
+from apps.produits.models import Produit
+
 from .models import (
     AjustementStock,
     Inventaire,
@@ -68,10 +71,10 @@ class MouvementStockSerializer(serializers.ModelSerializer):
 class EntreeStockSerializer(serializers.Serializer):
     """Saisie d'une entrée de stock manuelle (approvisionnement fournisseur)."""
     depot = serializers.PrimaryKeyRelatedField(
-        queryset=__import__('apps.companies.models', fromlist=['Depot']).Depot.objects.all()
+        queryset=Depot.objects.all()
     )
     produit = serializers.PrimaryKeyRelatedField(
-        queryset=__import__('apps.produits.models', fromlist=['Produit']).Produit.objects.all()
+        queryset=Produit.objects.all()
     )
     quantite = serializers.DecimalField(max_digits=12, decimal_places=3, min_value=0.001)
     numero_lot = serializers.CharField(max_length=100, required=False, allow_blank=True)
@@ -83,14 +86,14 @@ class EntreeStockSerializer(serializers.Serializer):
 class SortieStockSerializer(serializers.Serializer):
     """Saisie d'une sortie de stock manuelle."""
     depot = serializers.PrimaryKeyRelatedField(
-        queryset=__import__('apps.companies.models', fromlist=['Depot']).Depot.objects.all()
+        queryset=Depot.objects.all()
     )
     produit = serializers.PrimaryKeyRelatedField(
-        queryset=__import__('apps.produits.models', fromlist=['Produit']).Produit.objects.all()
+        queryset=Produit.objects.all()
     )
     quantite = serializers.DecimalField(max_digits=12, decimal_places=3, min_value=0.001)
     reference_doc = serializers.CharField(max_length=100, required=False, allow_blank=True)
-    motif = serializers.CharField(required=False, allow_blank=True)
+    motif = serializers.CharField(required=True, allow_blank=False)
 
 
 # ── Transferts ────────────────────────────────────────────────────────────────
@@ -162,10 +165,10 @@ class TransfertDetailSerializer(serializers.ModelSerializer):
 class TransfertCreateSerializer(serializers.Serializer):
     """Création d'un transfert avec ses lignes."""
     depot_source = serializers.PrimaryKeyRelatedField(
-        queryset=__import__('apps.companies.models', fromlist=['Depot']).Depot.objects.all()
+        queryset=Depot.objects.all()
     )
     depot_destination = serializers.PrimaryKeyRelatedField(
-        queryset=__import__('apps.companies.models', fromlist=['Depot']).Depot.objects.all()
+        queryset=Depot.objects.all()
     )
     notes = serializers.CharField(required=False, allow_blank=True)
     lignes = LigneTransfertCreateSerializer(many=True)
@@ -177,6 +180,15 @@ class TransfertCreateSerializer(serializers.Serializer):
         if not data.get('lignes'):
             raise serializers.ValidationError(
                 {'lignes': "Au moins une ligne est requise."})
+        request = self.context.get('request')
+        company = request.user.company if request else None
+        if company:
+            if data['depot_source'].zone.company != company:
+                raise serializers.ValidationError(
+                    {'depot_source': "Ce dépôt n'appartient pas à votre entreprise."})
+            if data['depot_destination'].zone.company != company:
+                raise serializers.ValidationError(
+                    {'depot_destination': "Ce dépôt n'appartient pas à votre entreprise."})
         return data
 
 
@@ -234,7 +246,7 @@ class InventaireDetailSerializer(serializers.ModelSerializer):
 
 class InventaireCreateSerializer(serializers.Serializer):
     depot = serializers.PrimaryKeyRelatedField(
-        queryset=__import__('apps.companies.models', fromlist=['Depot']).Depot.objects.all()
+        queryset=Depot.objects.all()
     )
     notes = serializers.CharField(required=False, allow_blank=True, default='')
 
@@ -262,3 +274,10 @@ class AjustementStockSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'statut_label', 'produit_nom', 'depot_code',
                             'demande_par', 'demande_par_nom', 'traite_par',
                             'statut', 'created_at', 'traite_le']
+
+    def validate_motif(self, value):
+        if not value or not value.strip():
+            raise serializers.ValidationError(
+                "Le motif est obligatoire pour tout ajustement de stock (règle universelle §2)."
+            )
+        return value

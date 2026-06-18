@@ -5,6 +5,12 @@
 # --- Variables d'environnement (NE JAMAIS versionner) ---
 .env
 
+# --- Config serveur locale (chaque environnement a le sien, voir Caddyfile.example) ---
+Caddyfile
+
+# --- Override Docker local (ports dev) — ne pas versionner ---
+docker-compose.override.yml
+
 # --- Python ---
 __pycache__/
 *.py[cod]

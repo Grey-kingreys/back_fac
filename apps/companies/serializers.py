@@ -5,8 +5,6 @@ R1-B08 — Serializers CRUD Zones et Dépôts
 
 from rest_framework import serializers
 
-from apps.accounts.models import CustomUser
-
 from .models import Depot, Zone
 
 
@@ -92,13 +90,17 @@ class ZoneCreateUpdateSerializer(serializers.ModelSerializer):
         ]
 
     def validate_code(self, value):
-        """Code unique globalement (insensible à la casse). Stocké en majuscules."""
+        """Code unique par entreprise (insensible à la casse). Stocké en majuscules."""
+        request = self.context.get('request')
+        company = request.user.company if request else None
         qs = Zone.objects.filter(code__iexact=value)
+        if company:
+            qs = qs.filter(company=company)
         if self.instance:
             qs = qs.exclude(pk=self.instance.pk)
         if qs.exists():
             raise serializers.ValidationError(
-                "Ce code est déjà utilisé par une autre zone."
+                "Ce code est déjà utilisé par une autre zone dans votre entreprise."
             )
         return value.upper()
 
@@ -151,7 +153,7 @@ class DepotListSerializer(serializers.ModelSerializer):
     """
     zone_name = serializers.CharField(source='zone.name', read_only=True)
     zone_code = serializers.CharField(source='zone.code', read_only=True)
-    gestionnaire_nom = serializers.CharField(source='gestionnaire.get_full_name', read_only=True, allow_null=True)
+    gestionnaire = serializers.SerializerMethodField()
 
     class Meta:
         model = Depot
@@ -161,21 +163,29 @@ class DepotListSerializer(serializers.ModelSerializer):
             'code',
             'address',
             'is_active',
+            'latitude',
+            'longitude',
             'zone_id',
             'zone_name',
             'zone_code',
-            'gestionnaire_id',
-            'gestionnaire_nom',
+            'gestionnaire',
             'created_at',
         ]
         read_only_fields = fields
+
+    def get_gestionnaire(self, obj):
+        from apps.accounts.models import Role
+        user = obj.users.filter(role=Role.GESTIONNAIRE_STOCK, is_active=True).first()
+        if user:
+            return {'id': user.id, 'nom': user.get_full_name(), 'email': user.email}
+        return None
 
 
 class DepotDetailSerializer(serializers.ModelSerializer):
     """
     Serializer complet d'un dépôt.
-    Inclut les coordonnées GPS de la zone parente — utile pour
-    le frontend qui doit positionner le marqueur sur la carte.
+    Inclut les GPS du dépôt ET de sa zone parente (deux marqueurs distincts sur la carte).
+    Le gestionnaire est résolu via User.depot (pas de FK inverse).
     """
     zone_name = serializers.CharField(source='zone.name', read_only=True)
     zone_code = serializers.CharField(source='zone.code', read_only=True)
@@ -185,7 +195,7 @@ class DepotDetailSerializer(serializers.ModelSerializer):
     zone_longitude = serializers.DecimalField(
         source='zone.longitude', max_digits=9, decimal_places=6, read_only=True
     )
-    gestionnaire_nom = serializers.CharField(source='gestionnaire.get_full_name', read_only=True, allow_null=True)
+    gestionnaire = serializers.SerializerMethodField()
 
     class Meta:
         model = Depot
@@ -195,33 +205,37 @@ class DepotDetailSerializer(serializers.ModelSerializer):
             'code',
             'address',
             'is_active',
+            'latitude',
+            'longitude',
             'zone_id',
             'zone_name',
             'zone_code',
             'zone_latitude',
             'zone_longitude',
-            'gestionnaire_id',
-            'gestionnaire_nom',
+            'gestionnaire',
             'created_at',
             'updated_at',
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
+
+    def get_gestionnaire(self, obj):
+        from apps.accounts.models import Role
+        user = obj.users.filter(role=Role.GESTIONNAIRE_STOCK, is_active=True).first()
+        if user:
+            return {'id': user.id, 'nom': user.get_full_name(), 'email': user.email}
+        return None
 
 
 class DepotCreateUpdateSerializer(serializers.ModelSerializer):
     """
     Serializer de création et modification d'un dépôt.
     La zone doit appartenir à la même company que l'utilisateur connecté.
+    Le gestionnaire n'est pas géré ici — il est affecté via User.depot lors de
+    la création/modification de l'utilisateur avec role=gestionnaire_stock.
     """
     zone_id = serializers.PrimaryKeyRelatedField(
         queryset=Zone.objects.filter(is_active=True),
         source='zone',
-    )
-    gestionnaire_id = serializers.PrimaryKeyRelatedField(
-        queryset=CustomUser.objects.none(),  # surchargé dans __init__ selon la company
-        source='gestionnaire',
-        allow_null=True,
-        required=False,
     )
 
     class Meta:
@@ -231,19 +245,10 @@ class DepotCreateUpdateSerializer(serializers.ModelSerializer):
             'code',
             'address',
             'is_active',
+            'latitude',
+            'longitude',
             'zone_id',
-            'gestionnaire_id',
         ]
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        request = self.context.get('request')
-        if request and request.user.company:
-            self.fields['gestionnaire_id'].queryset = CustomUser.objects.filter(
-                company=request.user.company, is_active=True
-            )
-        else:
-            self.fields['gestionnaire_id'].queryset = CustomUser.objects.none()
 
     def validate_zone_id(self, zone):
         """La zone doit appartenir à la company de l'utilisateur connecté."""
@@ -256,13 +261,29 @@ class DepotCreateUpdateSerializer(serializers.ModelSerializer):
         return zone
 
     def validate_code(self, value):
-        """Code unique globalement (insensible à la casse). Stocké en majuscules."""
+        """Code unique par entreprise (insensible à la casse). Stocké en majuscules."""
+        request = self.context.get('request')
+        company = request.user.company if request else None
         qs = Depot.objects.filter(code__iexact=value)
+        if company:
+            qs = qs.filter(zone__company=company)
         if self.instance:
             qs = qs.exclude(pk=self.instance.pk)
         if qs.exists():
-            raise serializers.ValidationError("Ce code est déjà utilisé par un autre dépôt.")
+            raise serializers.ValidationError(
+                "Ce code est déjà utilisé par un autre dépôt dans votre entreprise."
+            )
         return value.upper()
+
+    def validate_latitude(self, value):
+        if value is not None and not (-90 <= value <= 90):
+            raise serializers.ValidationError("La latitude doit être comprise entre -90 et 90.")
+        return value
+
+    def validate_longitude(self, value):
+        if value is not None and not (-180 <= value <= 180):
+            raise serializers.ValidationError("La longitude doit être comprise entre -180 et 180.")
+        return value
 
     def validate(self, attrs):
         """Nom unique par zone."""
