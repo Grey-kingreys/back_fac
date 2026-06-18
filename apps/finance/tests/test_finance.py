@@ -379,8 +379,9 @@ class TestReglesUniversellesSessionCaisse:
             caissier=autre_caissier,
             solde_ouverture=Decimal("50000"),
         )
+        # Le caissier A ne voit pas la session d'un autre caissier → 404 (isolation queryset)
         res = client_caissier_a.post(session_fermer_url(session_autre.id), {"solde_reel": "50000"})
-        assert res.status_code == status.HTTP_403_FORBIDDEN
+        assert res.status_code == status.HTTP_404_NOT_FOUND
 
     def test_admin_peut_fermer_session_autre_caissier(self, client_admin_a, session_a):
         """L'admin peut fermer n'importe quelle session."""
@@ -436,9 +437,11 @@ class TestFermetureCaisseReglesUniverselles:
         assert res.status_code == status.HTTP_400_BAD_REQUEST
 
     def test_fermeture_caisse_sans_session_ouverte_acceptee(self, client_admin_a, caisse_a, session_a):
-        # Fermer la session d'abord
+        # Fermer la session d'abord (motif requis si écart, on passe solde=0 pour écart nul)
         from apps.finance.models import SessionCaisse
-        session_a.fermer(solde_reel=100000)
+        session_a.solde_fermeture_theorique = 0
+        session_a.save(update_fields=['solde_fermeture_theorique'])
+        session_a.fermer(solde_reel=0)
         url = f"/api/caisses/{caisse_a.id}/fermer/"
         res = client_admin_a.post(url)
         assert res.status_code == status.HTTP_200_OK

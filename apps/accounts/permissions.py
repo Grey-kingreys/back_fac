@@ -7,7 +7,7 @@ from rest_framework import permissions
 from rest_framework.request import Request
 from rest_framework.views import View
 
-from .models import Role, CustomUser
+from .models import CustomUser, Role
 
 
 class IsCompanyMember(permissions.BasePermission):
@@ -133,11 +133,10 @@ class CompanyFilterMixin:
         queryset = queryset.filter(**{self.company_lookup_field: user_company})
 
         # Scope zone pour les superviseurs (règle CDC : superviseur limité à sa zone)
-        if user.role == Role.SUPERVISEUR:
+        if user.role == Role.SUPERVISEUR and self.zone_lookup_field:
             if not user.zone:
                 return queryset.none()
-            if self.zone_lookup_field:
-                queryset = queryset.filter(**{self.zone_lookup_field: user.zone})
+            queryset = queryset.filter(**{self.zone_lookup_field: user.zone})
 
         return queryset
 

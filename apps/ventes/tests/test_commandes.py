@@ -76,7 +76,7 @@ class TestCommandeList:
         """Admin A ne voit pas les commandes de company B."""
         from apps.accounts.models import CustomUser, Role
         from apps.ventes.models import Commande
-        user_b = CustomUser.objects.create_user(
+        CustomUser.objects.create_user(
             email="admin_b_cmd@test.com", password="Pass1234!",
             role=Role.ADMIN, company=company_b, is_active=True,
         )

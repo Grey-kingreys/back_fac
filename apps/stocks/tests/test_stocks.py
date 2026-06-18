@@ -132,7 +132,7 @@ class TestEntreeStock:
 class TestSortieStock:
 
     def test_gestionnaire_fait_sortie(self, client_gestionnaire_a, stock_a, produit_a, depot_a):
-        payload = {"depot": depot_a.id, "produit": produit_a.id, "quantite": "10"}
+        payload = {"depot": depot_a.id, "produit": produit_a.id, "quantite": "10", "motif": "Vente directe"}
         res = client_gestionnaire_a.post(SORTIE_URL, payload)
         assert res.status_code == status.HTTP_201_CREATED
         stock_a.refresh_from_db()
@@ -144,7 +144,7 @@ class TestSortieStock:
         assert res.status_code in (status.HTTP_400_BAD_REQUEST, status.HTTP_409_CONFLICT)
 
     def test_caissier_peut_faire_sortie(self, client_caissier_a, stock_a, produit_a, depot_a):
-        payload = {"depot": depot_a.id, "produit": produit_a.id, "quantite": "5"}
+        payload = {"depot": depot_a.id, "produit": produit_a.id, "quantite": "5", "motif": "Retrait caisse"}
         res = client_caissier_a.post(SORTIE_URL, payload)
         assert res.status_code == status.HTTP_201_CREATED
 

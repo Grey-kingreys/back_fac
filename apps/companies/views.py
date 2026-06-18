@@ -225,9 +225,7 @@ class DepotViewSet(CompanyObjectMixin, CompanyFilterMixin, GenericViewSet, ListM
             return qs.none()
         qs = qs.filter(zone__company=company)
 
-        if user.role == Role.SUPERVISEUR:
-            if not user.zone:
-                return qs.none()
+        if user.role == Role.SUPERVISEUR and user.zone:
             qs = qs.filter(zone=user.zone)
 
         # Filtres query params

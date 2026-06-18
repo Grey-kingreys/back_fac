@@ -118,16 +118,16 @@ class IsCompanyMemberTest(TestCase):
         result = self.permission.has_object_permission(request, None, self.obj_company_b)
         self.assertFalse(result)
 
-    def test_superadmin_can_access_any_company_object(self):
-        """Le superadmin peut accéder à n'importe quel objet."""
+    def test_superadmin_cannot_access_company_objects(self):
+        """Le superadmin n'a pas de company → accès refusé aux données métier (isolation SaaS §8)."""
         request = self.factory.get('/')
         request.user = self.superadmin
 
         result = self.permission.has_object_permission(request, None, self.obj_company_a)
-        self.assertTrue(result)
+        self.assertFalse(result)
 
         result = self.permission.has_object_permission(request, None, self.obj_company_b)
-        self.assertTrue(result)
+        self.assertFalse(result)
 
     def test_user_without_company_cannot_access(self):
         """Un utilisateur sans company ne peut rien accéder."""
@@ -288,8 +288,8 @@ class CompanyFilterMixinTest(TestCase):
         self.assertEqual(queryset.count(), 1)
         self.assertEqual(queryset.first(), self.zone_a)
 
-    def test_superadmin_sees_all_data(self):
-        """Le superadmin voit toutes les données."""
+    def test_superadmin_sees_no_data(self):
+        """Le superadmin n'a pas de company → voit 0 données (isolation SaaS §8)."""
         request = self.factory.get('/')
         request.user = self.superadmin
 
@@ -297,7 +297,7 @@ class CompanyFilterMixinTest(TestCase):
         view.request = request
 
         queryset = view.get_queryset()
-        self.assertEqual(queryset.count(), 2)
+        self.assertEqual(queryset.count(), 0)
 
     def test_user_without_company_sees_nothing(self):
         """Un utilisateur sans company ne voit rien."""
@@ -374,14 +374,14 @@ class IsOwnerOrCompanyAdminTest(TestCase):
         result = permission.has_object_permission(request, None, self.user_obj)
         self.assertTrue(result)
 
-    def test_superadmin_can_access_any_object(self):
-        """Le superadmin peut accéder à n'importe quel objet."""
+    def test_superadmin_cannot_access_objects(self):
+        """Le superadmin n'a pas de company → accès refusé aux objets métier (isolation SaaS §8)."""
         permission = IsOwnerOrCompanyAdmin()
         request = self.factory.get('/')
         request.user = self.superadmin
 
         result = permission.has_object_permission(request, None, self.user_obj)
-        self.assertTrue(result)
+        self.assertFalse(result)
 
 
 class IsolationIntegrationTest(TestCase):
@@ -548,9 +548,9 @@ class TestPermissionsWithPytest:
         request.user = admin
         assert permission.has_permission(request, None)
 
-        # Superadmin a accès
+        # Superadmin n'a pas accès aux opérations métier des companies (isolation SaaS §8)
         request.user = superadmin
-        assert permission.has_permission(request, None)
+        assert not permission.has_permission(request, None)
 
     def test_is_supervisor_or_above_permission(self):
         """Test la permission IsSupervisorOrAbove."""

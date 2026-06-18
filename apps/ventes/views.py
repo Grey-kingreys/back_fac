@@ -559,8 +559,8 @@ class RetourCommandeViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
 class HistoriquePointsViewSet(GenericViewSet, ListModelMixin):
 
     def get_permissions(self):
-        return [IsAuthenticated(), IsSuperAdminBlocked(), HasRole([Role.ADMIN, Role.SUPERVISEUR,
-                                            Role.CAISSIER, Role.COMMERCIAL])]
+        return [IsAuthenticated(), IsSuperAdminBlocked(),
+                HasRole([Role.ADMIN, Role.SUPERVISEUR, Role.CAISSIER, Role.COMMERCIAL])]
 
     def get_serializer_class(self):
         return HistoriquePointsSerializer
