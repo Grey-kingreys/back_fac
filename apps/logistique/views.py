@@ -604,6 +604,13 @@ class ConsommationCarburantViewSet(GenericViewSet, ListModelMixin, RetrieveModel
     def create(self, request, *args, **kwargs):
         s = ConsommationCarburantSerializer(data=request.data)
         s.is_valid(raise_exception=True)
+        # Isolation SaaS : le véhicule (et la mission) doivent appartenir à l'entreprise
+        vehicule = s.validated_data.get('vehicule')
+        if vehicule is not None and vehicule.company_id != request.user.company_id:
+            raise ValidationError("Ce véhicule n'appartient pas à votre entreprise.")
+        mission = s.validated_data.get('mission')
+        if mission is not None and mission.company_id != request.user.company_id:
+            raise ValidationError("Cette mission n'appartient pas à votre entreprise.")
         obj = s.save(enregistre_par=request.user)
         # Mettre à jour le kilométrage du véhicule si supérieur
         vehicule = obj.vehicule

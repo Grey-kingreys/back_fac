@@ -8,7 +8,7 @@ from django.db import transaction
 from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import status
 from rest_framework.decorators import action
-from rest_framework.exceptions import PermissionDenied
+from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.mixins import ListModelMixin, RetrieveModelMixin
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -414,6 +414,12 @@ class MouvementDetteFournisseurViewSet(GenericViewSet, ListModelMixin):
             data=request.data, context={'request': request}
         )
         s.is_valid(raise_exception=True)
+        # Isolation SaaS : le fournisseur doit appartenir à l'entreprise de l'utilisateur
+        fournisseur = s.validated_data.get('fournisseur')
+        if fournisseur is not None and fournisseur.company_id != request.user.company_id:
+            raise ValidationError(
+                "Ce fournisseur n'appartient pas à votre entreprise."
+            )
         with transaction.atomic():
             mouvement = MouvementDetteFournisseur.objects.create(
                 created_par=request.user, **s.validated_data)

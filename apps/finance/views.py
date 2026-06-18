@@ -24,6 +24,7 @@ from .models import (
     CaissePhysique,
     CaisseZone,
     CompteMobileMoney,
+    ConfigurationCaisse,
     DepenseOperationnelle,
     SessionCaisse,
     TauxChange,
@@ -36,6 +37,7 @@ from .serializers import (
     CaissePhysiqueSerializer,
     CaisseZoneSerializer,
     CompteMobileMoneySerializer,
+    ConfigurationCaisseSerializer,
     DepenseOperationnelleSerializer,
     FermerSessionSerializer,
     OuvrirSessionSerializer,
@@ -51,6 +53,44 @@ from .serializers import (
 
 FINANCE_READ = [Role.ADMIN, Role.SUPERVISEUR, Role.CAISSIER]
 FINANCE_WRITE = [Role.ADMIN]
+
+
+# ── Configuration des caisses (durées de période) ─────────────────────────────
+@extend_schema(tags=["Finance — Configuration"])
+class ConfigurationCaisseView(APIView):
+    """
+    Configuration des durées de période des caisses (admin).
+    GET  : lecture seule (tous les rôles finance).
+    PATCH: modification (admin uniquement) — règle session < dépôt < zone.
+    """
+
+    def get_permissions(self):
+        if self.request.method == 'PATCH':
+            return [IsAuthenticated(), IsSuperAdminBlocked(), HasAnyRole(*FINANCE_WRITE)()]
+        return [IsAuthenticated(), IsSuperAdminBlocked(), HasAnyRole(*FINANCE_READ)()]
+
+    def _get_or_create_config(self, company):
+        config, _created = ConfigurationCaisse.objects.get_or_create(company=company)
+        return config
+
+    @extend_schema(summary="Configuration des durées de caisses", responses={200: ConfigurationCaisseSerializer})
+    def get(self, request):
+        company = request.user.company
+        if not company:
+            return Response({'detail': "Pas d'entreprise associée."}, status=400)
+        config = self._get_or_create_config(company)
+        return Response(ConfigurationCaisseSerializer(config).data)
+
+    @extend_schema(summary="Modifier la configuration des durées de caisses", responses={200: ConfigurationCaisseSerializer})
+    def patch(self, request):
+        company = request.user.company
+        if not company:
+            return Response({'detail': "Pas d'entreprise associée."}, status=400)
+        config = self._get_or_create_config(company)
+        s = ConfigurationCaisseSerializer(config, data=request.data, partial=True)
+        s.is_valid(raise_exception=True)
+        s.save(updated_by=request.user)
+        return Response(s.data)
 
 
 # ── Taux de change ────────────────────────────────────────────────────────────

@@ -8,7 +8,8 @@ from django.contrib.auth.password_validation import validate_password
 
 from rest_framework import serializers
 
-from apps.companies.models import Depot
+from apps.accounts.models import Role
+from apps.companies.models import Depot, Zone
 
 
 User = get_user_model()
@@ -21,6 +22,7 @@ class UserListSerializer(serializers.ModelSerializer):
     """
     company_name = serializers.CharField(source='company.name', read_only=True, default=None)
     depot_name = serializers.CharField(source='depot.name', read_only=True, default=None)
+    zone_name = serializers.CharField(source='zone.name', read_only=True, default=None)
     full_name = serializers.SerializerMethodField()
 
     class Meta:
@@ -38,6 +40,8 @@ class UserListSerializer(serializers.ModelSerializer):
             'company_name',
             'depot_id',
             'depot_name',
+            'zone_id',
+            'zone_name',
             'created_at',
         ]
         read_only_fields = fields
@@ -52,6 +56,7 @@ class UserDetailSerializer(serializers.ModelSerializer):
     """
     company_name = serializers.CharField(source='company.name', read_only=True, default=None)
     depot_name = serializers.CharField(source='depot.name', read_only=True, default=None)
+    zone_name = serializers.CharField(source='zone.name', read_only=True, default=None)
     avatar_url = serializers.SerializerMethodField()
 
     class Meta:
@@ -68,6 +73,8 @@ class UserDetailSerializer(serializers.ModelSerializer):
             'company_name',
             'depot_id',
             'depot_name',
+            'zone_id',
+            'zone_name',
             'avatar_url',
             'failed_attempts',
             'created_at',
@@ -102,6 +109,12 @@ class UserCreateSerializer(serializers.ModelSerializer):
         required=False,
         allow_null=True,
     )
+    zone_id = serializers.PrimaryKeyRelatedField(
+        queryset=Zone.objects.all(),
+        source='zone',
+        required=False,
+        allow_null=True,
+    )
 
     class Meta:
         model = User
@@ -112,21 +125,17 @@ class UserCreateSerializer(serializers.ModelSerializer):
             'phone',
             'role',
             'depot_id',
+            'zone_id',
             'password',
         ]
 
     def validate_email(self, value):
-        """Email unique par company."""
-        request = self.context.get('request')
-        company = request.user.company if request else None
-
-        qs = User.objects.filter(email=value)
-        if company:
-            qs = qs.filter(company=company)
-
-        if qs.exists():
+        """Email unique au niveau plateforme (contrainte DB globale unique=True)."""
+        # Le champ CustomUser.email est unique globalement : on vérifie globalement
+        # pour renvoyer une 400 propre au lieu d'une IntegrityError 500.
+        if User.objects.filter(email__iexact=value).exists():
             raise serializers.ValidationError(
-                "Un utilisateur avec cet email existe déjà dans cette entreprise."
+                "Un utilisateur avec cet email existe déjà."
             )
         return value
 
@@ -139,6 +148,37 @@ class UserCreateSerializer(serializers.ModelSerializer):
                     "Ce dépôt n'appartient pas à votre entreprise."
                 )
         return depot
+
+    def validate_zone_id(self, zone):
+        """La zone doit appartenir à la même company que le créateur."""
+        request = self.context.get('request')
+        if zone and request and request.user.company:
+            if zone.company != request.user.company:
+                raise serializers.ValidationError(
+                    "Cette zone n'appartient pas à votre entreprise."
+                )
+        return zone
+
+    def validate(self, attrs):
+        """
+        Affectation organisationnelle selon le rôle :
+        - Superviseur → rattaché à une ZONE (responsable de zone) ; pas de dépôt.
+        - Autres rôles opérationnels → rattachés à un DÉPÔT.
+        """
+        role = attrs.get('role')
+        zone = attrs.get('zone')
+        depot = attrs.get('depot')
+        if role == Role.SUPERVISEUR:
+            if not zone:
+                raise serializers.ValidationError(
+                    {'zone_id': "Un superviseur doit obligatoirement être affecté à une zone."}
+                )
+            # Le superviseur est rattaché à une zone, pas à un dépôt
+            attrs['depot'] = None
+        else:
+            # Les rôles non-superviseur ne portent pas de zone de supervision
+            attrs['zone'] = None
+        return attrs
 
     def create(self, validated_data):
         request = self.context.get('request')
@@ -165,6 +205,12 @@ class UserUpdateSerializer(serializers.ModelSerializer):
         required=False,
         allow_null=True,
     )
+    zone_id = serializers.PrimaryKeyRelatedField(
+        queryset=Zone.objects.all(),
+        source='zone',
+        required=False,
+        allow_null=True,
+    )
 
     class Meta:
         model = User
@@ -175,6 +221,7 @@ class UserUpdateSerializer(serializers.ModelSerializer):
             'role',
             'is_active',
             'depot_id',
+            'zone_id',
         ]
 
     def validate_depot_id(self, depot):
@@ -186,6 +233,29 @@ class UserUpdateSerializer(serializers.ModelSerializer):
                     "Ce dépôt n'appartient pas à votre entreprise."
                 )
         return depot
+
+    def validate_zone_id(self, zone):
+        """La zone doit appartenir à la même company."""
+        request = self.context.get('request')
+        if zone and request and request.user.company:
+            if zone.company != request.user.company:
+                raise serializers.ValidationError(
+                    "Cette zone n'appartient pas à votre entreprise."
+                )
+        return zone
+
+    def validate(self, attrs):
+        """Cohérence rôle ↔ affectation lors d'une modification."""
+        role = attrs.get('role', getattr(self.instance, 'role', None))
+        if role == Role.SUPERVISEUR:
+            zone = attrs.get('zone', getattr(self.instance, 'zone', None))
+            if not zone:
+                raise serializers.ValidationError(
+                    {'zone_id': "Un superviseur doit obligatoirement être affecté à une zone."}
+                )
+            if 'role' in attrs or 'zone' in attrs:
+                attrs['depot'] = None
+        return attrs
 
 
 class AdminPasswordResetSerializer(serializers.Serializer):

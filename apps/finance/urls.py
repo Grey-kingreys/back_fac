@@ -7,6 +7,7 @@ from .views import (
     CaissePhysiqueViewSet,
     CaisseZoneViewSet,
     CompteMobileMoneyViewSet,
+    ConfigurationCaisseView,
     ConsolidationCaissesView,
     DepenseOperationnelleViewSet,
     SessionCaisseViewSet,
@@ -27,5 +28,6 @@ router.register(r'depenses', DepenseOperationnelleViewSet, basename='depense')
 
 urlpatterns = [
     path('caisses/consolidation/', ConsolidationCaissesView.as_view(), name='caisses-consolidation'),
+    path('configuration-caisses/', ConfigurationCaisseView.as_view(), name='configuration-caisses'),
     path('', include(router.urls)),
 ]

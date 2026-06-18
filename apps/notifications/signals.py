@@ -162,7 +162,7 @@ def notifier_seuil_fidelite(sender, instance, **kwargs):
             from .models import Notification
             deja_notifie = Notification.objects.filter(
                 destinataire__company=instance.company,
-                type_notification='seuil_stock',  # Réutilise info type
+                type_notification='info',  # même type que la notif réellement créée
                 lien=f"/clients/{instance.pk}/fidelite/{seuil}/",
             ).exists()
             if deja_notifie:
