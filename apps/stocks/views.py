@@ -16,7 +16,7 @@ from rest_framework.response import Response
 from rest_framework.viewsets import GenericViewSet
 
 from apps.accounts.models import Role
-from apps.accounts.permissions import CompanyFilterMixin, HasRole, IsCompanyMember, IsSuperAdminBlocked
+from apps.accounts.permissions import CompanyFilterMixin, HasAnyRole, HasRole, IsCompanyMember, IsSuperAdminBlocked
 
 from .models import AjustementStock, Inventaire, LigneInventaire, MouvementStock, StockDepot, TransfertStock
 from .serializers import (
@@ -57,7 +57,7 @@ class StockDepotViewSet(CompanyFilterMixin, GenericViewSet, ListModelMixin, Retr
     STOCK_ROLES = [Role.ADMIN, Role.SUPERVISEUR, Role.GESTIONNAIRE_STOCK, Role.CAISSIER]
 
     def get_permissions(self):
-        return [IsAuthenticated(), IsSuperAdminBlocked(), HasRole(self.STOCK_ROLES)]
+        return [IsAuthenticated(), IsSuperAdminBlocked(), HasAnyRole(*self.STOCK_ROLES)()]
 
     # Override : StockDepot n'a pas de FK company directe
     def get_queryset(self):
@@ -113,7 +113,7 @@ class StockDepotViewSet(CompanyFilterMixin, GenericViewSet, ListModelMixin, Retr
         permission_classes=[
             IsAuthenticated,
             IsSuperAdminBlocked,
-            HasRole([Role.ADMIN, Role.GESTIONNAIRE_STOCK]),
+            HasAnyRole(Role.ADMIN, Role.GESTIONNAIRE_STOCK),
         ],
     )
     def entree(self, request):
@@ -147,7 +147,7 @@ class StockDepotViewSet(CompanyFilterMixin, GenericViewSet, ListModelMixin, Retr
         permission_classes=[
             IsAuthenticated,
             IsSuperAdminBlocked,
-            HasRole([Role.ADMIN, Role.GESTIONNAIRE_STOCK, Role.CAISSIER]),
+            HasAnyRole(Role.ADMIN, Role.GESTIONNAIRE_STOCK, Role.CAISSIER),
         ],
     )
     def sortie(self, request):
@@ -181,7 +181,7 @@ class MouvementStockViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
     ROLES = [Role.ADMIN, Role.SUPERVISEUR, Role.GESTIONNAIRE_STOCK]
 
     def get_permissions(self):
-        return [IsAuthenticated(), IsSuperAdminBlocked(), HasRole(self.ROLES)]
+        return [IsAuthenticated(), IsSuperAdminBlocked(), HasAnyRole(*self.ROLES)()]
 
     def get_queryset(self):
         qs = MouvementStock.objects.select_related(
@@ -235,8 +235,8 @@ class TransfertStockViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
 
     def get_permissions(self):
         if self.action in ('list', 'retrieve'):
-            return [IsAuthenticated(), IsSuperAdminBlocked(), HasRole(self.ROLES)]
-        return [IsAuthenticated(), IsSuperAdminBlocked(), HasRole(self.WRITE_ROLES)]
+            return [IsAuthenticated(), IsSuperAdminBlocked(), HasAnyRole(*self.ROLES)()]
+        return [IsAuthenticated(), IsSuperAdminBlocked(), HasAnyRole(*self.WRITE_ROLES)()]
 
     def get_queryset(self):
         qs = TransfertStock.objects.select_related(
@@ -362,7 +362,7 @@ class InventaireViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
     CREATE_ROLES = [Role.ADMIN, Role.SUPERVISEUR, Role.GESTIONNAIRE_STOCK]
 
     def get_permissions(self):
-        return [IsAuthenticated(), IsSuperAdminBlocked(), HasRole(self.ROLES)]
+        return [IsAuthenticated(), IsSuperAdminBlocked(), HasAnyRole(*self.ROLES)()]
 
     def get_serializer_class(self):
         return InventaireListSerializer if self.action == 'list' else InventaireDetailSerializer
@@ -480,9 +480,9 @@ class AjustementStockViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin)
     serializer_class = AjustementStockSerializer
 
     def get_permissions(self):
-        return [IsAuthenticated(), IsSuperAdminBlocked(), HasRole([
+        return [IsAuthenticated(), IsSuperAdminBlocked(), HasAnyRole(
             Role.ADMIN, Role.SUPERVISEUR, Role.GESTIONNAIRE_STOCK
-        ])]
+        )()]
 
     def get_queryset(self):
         qs = AjustementStock.objects.select_related(

@@ -19,7 +19,7 @@ from rest_framework.views import APIView
 from rest_framework.viewsets import GenericViewSet
 
 from apps.accounts.models import Role
-from apps.accounts.permissions import CompanyFilterMixin, HasRole, IsCompanyMember, IsSuperAdminBlocked
+from apps.accounts.permissions import CompanyFilterMixin, HasAnyRole, HasRole, IsCompanyMember, IsSuperAdminBlocked
 
 from .models import (
     Client,
@@ -64,8 +64,8 @@ class VenteWriteMixin:
 
     def get_permissions(self):
         if self.action in ('list', 'retrieve'):
-            return [IsAuthenticated(), IsSuperAdminBlocked(), HasRole(self.READ_ROLES)]
-        return [IsAuthenticated(), IsSuperAdminBlocked(), HasRole(self.WRITE_ROLES)]
+            return [IsAuthenticated(), IsSuperAdminBlocked(), HasAnyRole(*self.READ_ROLES)()]
+        return [IsAuthenticated(), IsSuperAdminBlocked(), HasAnyRole(*self.WRITE_ROLES)()]
 
 
 # ── Paramètres fidélité ───────────────────────────────────────────────────────
@@ -74,7 +74,7 @@ class VenteWriteMixin:
 class ParametresFideliteView(APIView):
 
     def get_permissions(self):
-        return [IsAuthenticated(), IsSuperAdminBlocked(), HasRole([Role.ADMIN])]
+        return [IsAuthenticated(), IsSuperAdminBlocked(), HasAnyRole(Role.ADMIN)()]
 
     @extend_schema(summary="Lire les paramètres fidélité de l'entreprise", responses={200: ParametresFideliteSerializer})
     def get(self, request):
@@ -177,7 +177,7 @@ class CommandeViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
     VENTE_ROLES = [Role.ADMIN, Role.CAISSIER, Role.COMMERCIAL]
 
     def get_permissions(self):
-        return [IsAuthenticated(), IsSuperAdminBlocked(), HasRole(self.VENTE_ROLES)]
+        return [IsAuthenticated(), IsSuperAdminBlocked(), HasAnyRole(*self.VENTE_ROLES)()]
 
     def get_serializer_class(self):
         return CommandeListSerializer if self.action == 'list' else CommandeDetailSerializer
@@ -402,8 +402,8 @@ class DevisViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
 
     def get_permissions(self):
         if self.action in ('list', 'retrieve'):
-            return [IsAuthenticated(), IsSuperAdminBlocked(), HasRole(self.DEVIS_READ_ROLES)]
-        return [IsAuthenticated(), IsSuperAdminBlocked(), HasRole(self.DEVIS_WRITE_ROLES)]
+            return [IsAuthenticated(), IsSuperAdminBlocked(), HasAnyRole(*self.DEVIS_READ_ROLES)()]
+        return [IsAuthenticated(), IsSuperAdminBlocked(), HasAnyRole(*self.DEVIS_WRITE_ROLES)()]
 
     def get_serializer_class(self):
         return DevisListSerializer if self.action == 'list' else DevisDetailSerializer
@@ -502,7 +502,7 @@ class RetourCommandeViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
     RETOUR_ROLES = [Role.ADMIN, Role.SUPERVISEUR, Role.CAISSIER]
 
     def get_permissions(self):
-        return [IsAuthenticated(), IsSuperAdminBlocked(), HasRole(self.RETOUR_ROLES)]
+        return [IsAuthenticated(), IsSuperAdminBlocked(), HasAnyRole(*self.RETOUR_ROLES)()]
 
     def get_serializer_class(self):
         return RetourCommandeSerializer
@@ -560,7 +560,7 @@ class HistoriquePointsViewSet(GenericViewSet, ListModelMixin):
 
     def get_permissions(self):
         return [IsAuthenticated(), IsSuperAdminBlocked(),
-                HasRole([Role.ADMIN, Role.SUPERVISEUR, Role.CAISSIER, Role.COMMERCIAL])]
+                HasAnyRole(Role.ADMIN, Role.SUPERVISEUR, Role.CAISSIER, Role.COMMERCIAL)()]
 
     def get_serializer_class(self):
         return HistoriquePointsSerializer

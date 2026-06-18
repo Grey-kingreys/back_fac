@@ -15,7 +15,7 @@ from rest_framework.response import Response
 from rest_framework.viewsets import GenericViewSet
 
 from apps.accounts.models import Role
-from apps.accounts.permissions import CompanyFilterMixin, HasRole, IsSuperAdminBlocked
+from apps.accounts.permissions import CompanyFilterMixin, HasAnyRole, HasRole, IsSuperAdminBlocked
 
 from .models import (
     ConsommationCarburant,
@@ -63,8 +63,8 @@ class VehiculeViewSet(CompanyFilterMixin, GenericViewSet,
 
     def get_permissions(self):
         if self.action in ('list', 'retrieve'):
-            return [IsAuthenticated(), IsSuperAdminBlocked(), HasRole(LOG_READ)]
-        return [IsAuthenticated(), IsSuperAdminBlocked(), HasRole(LOG_WRITE_VEHICLE)]
+            return [IsAuthenticated(), IsSuperAdminBlocked(), HasAnyRole(*LOG_READ)()]
+        return [IsAuthenticated(), IsSuperAdminBlocked(), HasAnyRole(*LOG_WRITE_VEHICLE)()]
 
     def create(self, request, *args, **kwargs):
         s = VehiculeSerializer(data=request.data, context={'request': request})
@@ -95,7 +95,7 @@ class VehiculeViewSet(CompanyFilterMixin, GenericViewSet,
 class MissionViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
 
     def get_permissions(self):
-        return [IsAuthenticated(), IsSuperAdminBlocked(), HasRole(LOG_READ)]
+        return [IsAuthenticated(), IsSuperAdminBlocked(), HasAnyRole(*LOG_READ)()]
 
     def get_serializer_class(self):
         return MissionListSerializer if self.action == 'list' else MissionDetailSerializer
@@ -223,7 +223,7 @@ class MissionViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
 
     @extend_schema(summary="Signaler l'arrivée avec signature")
     @action(detail=True, methods=['post'], url_path='arrivee',
-            permission_classes=[IsAuthenticated, HasRole(LOG_READ)])
+            permission_classes=[IsAuthenticated, HasAnyRole(*LOG_READ)])
     def arrivee(self, request, pk=None):
         mission = self.get_object()
         user = request.user
@@ -450,8 +450,8 @@ class MaintenanceViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
 
     def get_permissions(self):
         if self.action in ('list', 'retrieve'):
-            return [IsAuthenticated(), IsSuperAdminBlocked(), HasRole(LOG_READ)]
-        return [IsAuthenticated(), IsSuperAdminBlocked(), HasRole([Role.ADMIN, Role.MAINTENANCIER])]
+            return [IsAuthenticated(), IsSuperAdminBlocked(), HasAnyRole(*LOG_READ)()]
+        return [IsAuthenticated(), IsSuperAdminBlocked(), HasAnyRole(Role.ADMIN, Role.MAINTENANCIER)()]
 
     def get_queryset(self):
         qs = Maintenance.objects.select_related(
@@ -495,7 +495,7 @@ class PanneViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
     serializer_class = PanneSerializer
 
     def get_permissions(self):
-        return [IsAuthenticated(), IsSuperAdminBlocked(), HasRole(LOG_READ)]
+        return [IsAuthenticated(), IsSuperAdminBlocked(), HasAnyRole(*LOG_READ)()]
 
     def get_queryset(self):
         qs = Panne.objects.select_related(
@@ -546,8 +546,8 @@ class DocumentVehiculeViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin
 
     def get_permissions(self):
         if self.action in ('list', 'retrieve'):
-            return [IsAuthenticated(), IsSuperAdminBlocked(), HasRole(LOG_READ)]
-        return [IsAuthenticated(), IsSuperAdminBlocked(), HasRole([Role.ADMIN, Role.MAINTENANCIER])]
+            return [IsAuthenticated(), IsSuperAdminBlocked(), HasAnyRole(*LOG_READ)()]
+        return [IsAuthenticated(), IsSuperAdminBlocked(), HasAnyRole(Role.ADMIN, Role.MAINTENANCIER)()]
 
     def get_queryset(self):
         qs = DocumentVehicule.objects.select_related(
@@ -585,7 +585,7 @@ class ConsommationCarburantViewSet(GenericViewSet, ListModelMixin, RetrieveModel
     LOGI_ROLES = [Role.ADMIN, Role.CHAUFFEUR, Role.MAINTENANCIER]
 
     def get_permissions(self):
-        return [IsAuthenticated(), IsSuperAdminBlocked(), HasRole(self.LOGI_ROLES)]
+        return [IsAuthenticated(), IsSuperAdminBlocked(), HasAnyRole(*self.LOGI_ROLES)()]
 
     def get_queryset(self):
         qs = ConsommationCarburant.objects.select_related(

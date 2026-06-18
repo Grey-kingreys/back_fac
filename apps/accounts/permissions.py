@@ -48,25 +48,39 @@ class HasRole(permissions.BasePermission):
     """
     Vérifie que l'utilisateur possède l'un des rôles autorisés.
 
-    Utilisation :
-    permission_classes = [HasRole(['admin', 'superviseur'])]
+    Pour usage dans permission_classes, utiliser la factory HasAnyRole :
+        permission_classes = [HasAnyRole(Role.ADMIN, Role.SUPERVISEUR)]
+    Pour vérification directe dans le code :
+        HasRole([Role.ADMIN]).has_permission(request, view)
     """
+    required_roles: list = []
 
-    def __init__(self, allowed_roles: list[str] = None):
+    def __init__(self, allowed_roles=None):
         super().__init__()
-        self.allowed_roles = allowed_roles or []
+        if allowed_roles is not None:
+            self.required_roles = list(allowed_roles)
 
     def has_permission(self, request: Request, view: View) -> bool:
         """Vérifie le rôle de l'utilisateur."""
         if not request.user or not request.user.is_authenticated:
             return False
 
-        if not self.allowed_roles:
+        if not self.required_roles:
             return True
 
-        # Pas de bypass superadmin : il doit être explicitement dans allowed_roles
+        # Pas de bypass superadmin : il doit être explicitement dans required_roles
         # ou bloqué par IsSuperAdminBlocked sur les endpoints opérationnels.
-        return request.user.role in self.allowed_roles
+        return request.user.role in self.required_roles
+
+
+def HasAnyRole(*roles):
+    """
+    Factory retournant une CLASSE HasRole pour usage dans permission_classes.
+
+    Usage :
+        permission_classes = [HasAnyRole(Role.ADMIN, Role.SUPERVISEUR)]
+    """
+    return type("HasAnyRole", (HasRole,), {"required_roles": list(roles)})
 
 
 class IsOwnerOrCompanyAdmin(permissions.BasePermission):

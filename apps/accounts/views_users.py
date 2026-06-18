@@ -22,7 +22,7 @@ from rest_framework.response import Response
 from rest_framework.viewsets import GenericViewSet
 
 from apps.accounts.models import Role
-from apps.accounts.permissions import CompanyFilterMixin, HasRole, IsCompanyMember, IsSuperAdminBlocked
+from apps.accounts.permissions import CompanyFilterMixin, HasAnyRole, HasRole, IsCompanyMember, IsSuperAdminBlocked
 from apps.accounts.serializers import (
     AdminPasswordResetSerializer,
     UserCreateSerializer,
@@ -57,12 +57,12 @@ class UserViewSet(CompanyFilterMixin, GenericViewSet, ListModelMixin, RetrieveMo
         """
         admin_only = [
             IsSuperAdminBlocked(),
-            HasRole([Role.ADMIN]),
+            HasAnyRole(Role.ADMIN)(),
             IsAuthenticated(),
         ]
         admin_or_supervisor = [
             IsSuperAdminBlocked(),
-            HasRole([Role.ADMIN, Role.SUPERVISEUR]),
+            HasAnyRole(Role.ADMIN, Role.SUPERVISEUR)(),
             IsAuthenticated(),
         ]
 

@@ -17,7 +17,7 @@ from rest_framework.views import APIView
 from rest_framework.viewsets import GenericViewSet
 
 from apps.accounts.models import Role
-from apps.accounts.permissions import CompanyFilterMixin, HasRole, IsSuperAdminBlocked
+from apps.accounts.permissions import CompanyFilterMixin, HasAnyRole, HasRole, IsSuperAdminBlocked
 
 from .models import (
     CaisseEntreprise,
@@ -64,8 +64,8 @@ class TauxChangeViewSet(CompanyFilterMixin, GenericViewSet,
 
     def get_permissions(self):
         if self.action in ('list', 'retrieve'):
-            return [IsAuthenticated(), IsSuperAdminBlocked(), HasRole(FINANCE_READ)]
-        return [IsAuthenticated(), IsSuperAdminBlocked(), HasRole(FINANCE_WRITE)]
+            return [IsAuthenticated(), IsSuperAdminBlocked(), HasAnyRole(*FINANCE_READ)()]
+        return [IsAuthenticated(), IsSuperAdminBlocked(), HasAnyRole(*FINANCE_WRITE)()]
 
     def create(self, request, *args, **kwargs):
         s = TauxChangeSerializer(data=request.data, context={'request': request})
@@ -86,8 +86,8 @@ class CaissePhysiqueViewSet(CompanyFilterMixin, GenericViewSet,
 
     def get_permissions(self):
         if self.action in ('list', 'retrieve'):
-            return [IsAuthenticated(), IsSuperAdminBlocked(), HasRole(FINANCE_READ)]
-        return [IsAuthenticated(), IsSuperAdminBlocked(), HasRole(FINANCE_WRITE)]
+            return [IsAuthenticated(), IsSuperAdminBlocked(), HasAnyRole(*FINANCE_READ)()]
+        return [IsAuthenticated(), IsSuperAdminBlocked(), HasAnyRole(*FINANCE_WRITE)()]
 
     def create(self, request, *args, **kwargs):
         s = CaissePhysiqueSerializer(data=request.data, context={'request': request})
@@ -103,7 +103,7 @@ class CaissePhysiqueViewSet(CompanyFilterMixin, GenericViewSet,
         ),
     )
     @action(detail=True, methods=['post'], url_path='fermer',
-            permission_classes=[IsAuthenticated, HasRole([Role.ADMIN])])
+            permission_classes=[IsAuthenticated, HasAnyRole(Role.ADMIN)])
     def fermer(self, request, pk=None):
         caisse = self.get_object()
         if caisse.statut == CaissePhysique.Statut.FERMEE:
@@ -129,7 +129,7 @@ class CaissePhysiqueViewSet(CompanyFilterMixin, GenericViewSet,
 class SessionCaisseViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
 
     def get_permissions(self):
-        return [IsAuthenticated(), IsSuperAdminBlocked(), HasRole(FINANCE_READ)]
+        return [IsAuthenticated(), IsSuperAdminBlocked(), HasAnyRole(*FINANCE_READ)()]
 
     def get_serializer_class(self):
         return SessionCaisseListSerializer if self.action == 'list' else SessionCaisseDetailSerializer
@@ -162,7 +162,7 @@ class SessionCaisseViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
 
     @extend_schema(summary="Ouvrir une session de caisse")
     @action(detail=False, methods=['post'], url_path='ouvrir',
-            permission_classes=[IsAuthenticated, HasRole([Role.CAISSIER, Role.ADMIN])])
+            permission_classes=[IsAuthenticated, HasAnyRole(Role.CAISSIER, Role.ADMIN)])
     def ouvrir(self, request):
         s = OuvrirSessionSerializer(data=request.data)
         s.is_valid(raise_exception=True)
@@ -204,7 +204,7 @@ class SessionCaisseViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
 
     @extend_schema(summary="Fermer une session de caisse")
     @action(detail=True, methods=['post'], url_path='fermer',
-            permission_classes=[IsAuthenticated, HasRole(FINANCE_READ)])
+            permission_classes=[IsAuthenticated, HasAnyRole(*FINANCE_READ)])
     def fermer(self, request, pk=None):
         session = self.get_object()
         user = request.user
@@ -309,8 +309,8 @@ class CompteMobileMoneyViewSet(CompanyFilterMixin, GenericViewSet,
 
     def get_permissions(self):
         if self.action in ('list', 'retrieve', 'transactions'):
-            return [IsAuthenticated(), IsSuperAdminBlocked(), HasRole(FINANCE_READ)]
-        return [IsAuthenticated(), IsSuperAdminBlocked(), HasRole(FINANCE_WRITE)]
+            return [IsAuthenticated(), IsSuperAdminBlocked(), HasAnyRole(*FINANCE_READ)()]
+        return [IsAuthenticated(), IsSuperAdminBlocked(), HasAnyRole(*FINANCE_WRITE)()]
 
     def create(self, request, *args, **kwargs):
         s = CompteMobileMoneySerializer(data=request.data, context={'request': request})
@@ -366,8 +366,8 @@ class CaisseZoneViewSet(CompanyFilterMixin, GenericViewSet,
 
     def get_permissions(self):
         if self.action in ('list', 'retrieve'):
-            return [IsAuthenticated(), IsSuperAdminBlocked(), HasRole(FINANCE_READ)]
-        return [IsAuthenticated(), IsSuperAdminBlocked(), HasRole(FINANCE_WRITE)]
+            return [IsAuthenticated(), IsSuperAdminBlocked(), HasAnyRole(*FINANCE_READ)()]
+        return [IsAuthenticated(), IsSuperAdminBlocked(), HasAnyRole(*FINANCE_WRITE)()]
 
     def create(self, request, *args, **kwargs):
         s = CaisseZoneSerializer(data=request.data, context={'request': request})
@@ -383,7 +383,7 @@ class CaisseZoneViewSet(CompanyFilterMixin, GenericViewSet,
         ),
     )
     @action(detail=True, methods=['post'], url_path='fermer',
-            permission_classes=[IsAuthenticated, HasRole([Role.ADMIN])])
+            permission_classes=[IsAuthenticated, HasAnyRole(Role.ADMIN)])
     def fermer(self, request, pk=None):
         caisse_zone = self.get_object()
         if caisse_zone.statut == CaisseZone.Statut.FERMEE:
@@ -414,7 +414,7 @@ class CaisseEntrepriseViewSet(GenericViewSet, RetrieveModelMixin):
     serializer_class = CaisseEntrepriseSerializer
 
     def get_permissions(self):
-        return [IsAuthenticated(), IsSuperAdminBlocked(), HasRole(FINANCE_READ)]
+        return [IsAuthenticated(), IsSuperAdminBlocked(), HasAnyRole(*FINANCE_READ)()]
 
     def get_queryset(self):
         user = self.request.user
@@ -438,8 +438,8 @@ class VersementCaisseViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin)
 
     def get_permissions(self):
         if self.action in ('list', 'retrieve'):
-            return [IsAuthenticated(), IsSuperAdminBlocked(), HasRole(FINANCE_READ)]
-        return [IsAuthenticated(), IsSuperAdminBlocked(), HasRole(FINANCE_WRITE)]
+            return [IsAuthenticated(), IsSuperAdminBlocked(), HasAnyRole(*FINANCE_READ)()]
+        return [IsAuthenticated(), IsSuperAdminBlocked(), HasAnyRole(*FINANCE_WRITE)()]
 
     def get_queryset(self):
         qs = VersementCaisse.objects.select_related(
@@ -521,8 +521,8 @@ class DepenseOperationnelleViewSet(GenericViewSet, ListModelMixin, RetrieveModel
 
     def get_permissions(self):
         if self.action in ('list', 'retrieve'):
-            return [IsAuthenticated(), IsSuperAdminBlocked(), HasRole(FINANCE_READ)]
-        return [IsAuthenticated(), IsSuperAdminBlocked(), HasRole(FINANCE_WRITE)]
+            return [IsAuthenticated(), IsSuperAdminBlocked(), HasAnyRole(*FINANCE_READ)()]
+        return [IsAuthenticated(), IsSuperAdminBlocked(), HasAnyRole(*FINANCE_WRITE)()]
 
     def get_queryset(self):
         qs = DepenseOperationnelle.objects.select_related(
@@ -581,7 +581,7 @@ class ConsolidationCaissesView(APIView):
     """Vue consolidée des soldes de tous les niveaux de caisses."""
 
     def get_permissions(self):
-        return [IsAuthenticated(), IsSuperAdminBlocked(), HasRole(FINANCE_READ)]
+        return [IsAuthenticated(), IsSuperAdminBlocked(), HasAnyRole(*FINANCE_READ)()]
 
     @extend_schema(summary="Soldes consolidés — tous niveaux de caisses", responses={200: OpenApiTypes.OBJECT})
     def get(self, request):
