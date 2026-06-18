@@ -223,9 +223,8 @@ class DepotViewSet(CompanyObjectMixin, CompanyFilterMixin, GenericViewSet, ListM
         qs = Depot.objects.select_related('zone', 'zone__company').order_by('zone__name', 'name')
         user = self.request.user
 
-        if user.is_superadmin:
-            return qs
-
+        # Isolation SaaS : le superadmin n'accède pas aux données métier des entreprises
+        # (le blocage effectif est fait par IsSuperAdminBlocked ; on retire le résidu dangereux).
         company = user.company
         if not company:
             return qs.none()

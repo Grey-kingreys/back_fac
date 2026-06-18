@@ -151,13 +151,7 @@ jobs:
           DEBUG: "True"
         run: |
           pytest \
-            --tb=short \
-            --ds=config.settings \
-            -v \
             --ignore=venv \
-            --ignore=apps/entreprises \
-            --ignore=apps/zones \
-            -p no:cacheprovider \
             || [ $? -eq 5 ]
 
   # ─────────────────────────────────────────────

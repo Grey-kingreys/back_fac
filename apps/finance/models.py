@@ -5,9 +5,61 @@ Hiérarchie : Entreprise → Zone → Dépôt → Session Caissier
 """
 
 from django.conf import settings
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
+
+
+class ConfigurationCaisse(models.Model):
+    """
+    Configuration des durées de période des caisses, par entreprise (admin).
+
+    Hiérarchie des caisses : Entreprise (permanente) → Zone → Dépôt → Session caissier.
+    Chaque niveau a une durée de période de consolidation. Règle métier inviolable :
+    la durée d'un niveau INFÉRIEUR doit être STRICTEMENT plus courte que celle du
+    niveau SUPÉRIEUR (session < dépôt < zone). La caisse entreprise est permanente
+    (jamais fermée) et n'a donc pas de durée.
+    """
+    company = models.OneToOneField(
+        'companies.Company', on_delete=models.CASCADE,
+        related_name='configuration_caisse', verbose_name=_("Entreprise"),
+    )
+    duree_session_jours = models.PositiveIntegerField(
+        _("Durée d'une session caissier (jours)"), default=1,
+        help_text="Période de la caisse journalière / session caissier. Défaut : 1 jour.",
+    )
+    duree_caisse_depot_jours = models.PositiveIntegerField(
+        _("Durée d'une période de caisse dépôt (jours)"), default=30,
+        help_text="Période de consolidation d'une caisse dépôt. Défaut : 30 jours (1 mois).",
+    )
+    duree_caisse_zone_jours = models.PositiveIntegerField(
+        _("Durée d'une période de caisse zone (jours)"), default=90,
+        help_text="Période de consolidation d'une caisse zone. Défaut : 90 jours (3 mois).",
+    )
+    updated_at = models.DateTimeField(auto_now=True)
+    updated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='configurations_caisse_modifiees',
+    )
+
+    class Meta:
+        verbose_name = _("Configuration des caisses")
+        verbose_name_plural = _("Configurations des caisses")
+
+    def __str__(self):
+        return f"Config caisses — {self.company}"
+
+    def clean(self):
+        # Règle : durée inférieure (session) < dépôt < zone (strictement croissant)
+        if not (self.duree_session_jours
+                < self.duree_caisse_depot_jours
+                < self.duree_caisse_zone_jours):
+            raise ValidationError(
+                "Les durées doivent être strictement croissantes : "
+                "session < dépôt < zone (une caisse de niveau inférieur a une "
+                "durée de période plus courte que la caisse de niveau supérieur)."
+            )
 
 
 class TauxChange(models.Model):

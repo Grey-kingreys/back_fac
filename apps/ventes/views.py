@@ -460,8 +460,8 @@ class DevisViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
             raise ValidationError("Ce devis a déjà été converti.")
         if devis.statut == Devis.Statut.REFUSE:
             raise ValidationError("Impossible de convertir un devis refusé.")
-        if devis.statut == Devis.Statut.ANNULE if hasattr(Devis.Statut, 'ANNULE') else False:
-            raise ValidationError("Impossible de convertir un devis annulé.")
+        if devis.statut == Devis.Statut.EXPIRE:
+            raise ValidationError("Impossible de convertir un devis expiré.")
 
         company = request.user.company or devis.company
         lignes_data = [

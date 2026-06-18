@@ -9,6 +9,7 @@ from .models import (
     CaissePhysique,
     CaisseZone,
     CompteMobileMoney,
+    ConfigurationCaisse,
     DepenseOperationnelle,
     SessionCaisse,
     TauxChange,
@@ -16,6 +17,35 @@ from .models import (
     TransactionMobileMoney,
     VersementCaisse,
 )
+
+
+class ConfigurationCaisseSerializer(serializers.ModelSerializer):
+    updated_by_nom = serializers.CharField(
+        source='updated_by.get_full_name', read_only=True, allow_null=True)
+
+    class Meta:
+        model = ConfigurationCaisse
+        fields = ['id', 'duree_session_jours', 'duree_caisse_depot_jours',
+                  'duree_caisse_zone_jours', 'updated_at', 'updated_by', 'updated_by_nom']
+        read_only_fields = ['id', 'updated_at', 'updated_by', 'updated_by_nom']
+
+    def validate(self, attrs):
+        # Valeurs effectives (fusion instance existante + payload partiel)
+        def eff(field):
+            if field in attrs:
+                return attrs[field]
+            return getattr(self.instance, field, None)
+
+        session = eff('duree_session_jours')
+        depot = eff('duree_caisse_depot_jours')
+        zone = eff('duree_caisse_zone_jours')
+        if None not in (session, depot, zone):
+            if not (session < depot < zone):
+                raise serializers.ValidationError(
+                    "Les durées doivent être strictement croissantes : "
+                    "session < dépôt < zone."
+                )
+        return attrs
 
 
 class TauxChangeSerializer(serializers.ModelSerializer):
@@ -234,10 +264,18 @@ class VersementCaisseSerializer(serializers.ModelSerializer):
                 {'justificatif': "Un justificatif est obligatoire pour tout versement inter-niveau."}
             )
         # Règle universelle §4 : double comptage obligatoire à la création
-        if self.instance is None and attrs.get('montant_comptage_receveur') is None:
+        montant_receveur = attrs.get('montant_comptage_receveur')
+        if self.instance is None and montant_receveur is None:
             raise serializers.ValidationError(
                 {'montant_comptage_receveur': "Le montant du receveur est obligatoire (double comptage §4)."}
             )
+        # Règle universelle §2 : tout écart au double comptage exige un motif
+        montant = attrs.get('montant')
+        if montant_receveur is not None and montant is not None:
+            if montant_receveur != montant and not attrs.get('motif_ecart'):
+                raise serializers.ValidationError(
+                    {'motif_ecart': "Un motif est obligatoire lorsque le comptage du receveur diffère du montant versé."}
+                )
         return attrs
 
 
