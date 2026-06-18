@@ -28,7 +28,13 @@ from rest_framework.response import Response
 from rest_framework.viewsets import GenericViewSet
 
 from apps.accounts.models import Role
-from apps.accounts.permissions import CompanyFilterMixin, HasRole, IsCompanyMember, IsSuperAdminBlocked  # noqa: F401
+from apps.accounts.permissions import (  # noqa: F401
+    CompanyFilterMixin,
+    HasAnyRole,
+    HasRole,
+    IsCompanyMember,
+    IsSuperAdminBlocked,
+)
 
 from .models import Depot, Zone
 from .serializers import (
@@ -56,13 +62,13 @@ class CompanyObjectMixin:
         # Lecture : admin, superviseur, gestionnaire (ont besoin de voir zones/dépôts)
         read_perms = [
             IsSuperAdminBlocked(),
-            HasRole([Role.ADMIN, Role.SUPERVISEUR, Role.GESTIONNAIRE_STOCK]),
+            HasAnyRole(Role.ADMIN, Role.SUPERVISEUR, Role.GESTIONNAIRE_STOCK)(),
             IsAuthenticated(),
         ]
         # Écriture : admin uniquement (configuration de l'infrastructure)
         write_perms = [
             IsSuperAdminBlocked(),
-            HasRole([Role.ADMIN]),
+            HasAnyRole(Role.ADMIN)(),
             IsAuthenticated(),
         ]
         if self.action in ('list', 'retrieve', 'dashboard'):

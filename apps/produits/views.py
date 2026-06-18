@@ -15,7 +15,7 @@ from rest_framework.response import Response
 from rest_framework.viewsets import GenericViewSet
 
 from apps.accounts.models import Role
-from apps.accounts.permissions import CompanyFilterMixin, HasRole, IsCompanyMember, IsSuperAdminBlocked
+from apps.accounts.permissions import CompanyFilterMixin, HasAnyRole, HasRole, IsCompanyMember, IsSuperAdminBlocked
 
 from .models import (
     Categorie,
@@ -51,8 +51,8 @@ class CompanyWriteMixin:
 
     def get_permissions(self):
         if self.action in ('list', 'retrieve', 'stock'):
-            return [IsAuthenticated(), IsSuperAdminBlocked(), HasRole(self.READ_ROLES)]
-        return [IsAuthenticated(), IsSuperAdminBlocked(), HasRole(self.WRITE_ROLES)]
+            return [IsAuthenticated(), IsSuperAdminBlocked(), HasAnyRole(*self.READ_ROLES)()]
+        return [IsAuthenticated(), IsSuperAdminBlocked(), HasAnyRole(*self.WRITE_ROLES)()]
 
     def _check_company(self, request, instance):
         if not IsCompanyMember().has_object_permission(request, self, instance):
@@ -299,8 +299,8 @@ class CommandeFournisseurViewSet(GenericViewSet, ListModelMixin, RetrieveModelMi
 
     def get_permissions(self):
         if self.action in ('list', 'retrieve'):
-            return [IsAuthenticated(), IsSuperAdminBlocked(), HasRole(self.ROLES)]
-        return [IsAuthenticated(), IsSuperAdminBlocked(), HasRole(self.WRITE_ROLES)]
+            return [IsAuthenticated(), IsSuperAdminBlocked(), HasAnyRole(*self.ROLES)()]
+        return [IsAuthenticated(), IsSuperAdminBlocked(), HasAnyRole(*self.WRITE_ROLES)()]
 
     def get_serializer_class(self):
         if self.action == 'list':
@@ -394,7 +394,7 @@ class MouvementDetteFournisseurViewSet(GenericViewSet, ListModelMixin):
     serializer_class = MouvementDetteFournisseurSerializer
 
     def get_permissions(self):
-        return [IsAuthenticated(), IsSuperAdminBlocked(), HasRole([Role.ADMIN, Role.SUPERVISEUR])]
+        return [IsAuthenticated(), IsSuperAdminBlocked(), HasAnyRole(Role.ADMIN, Role.SUPERVISEUR)()]
 
     def get_queryset(self):
         qs = MouvementDetteFournisseur.objects.select_related(
@@ -435,8 +435,8 @@ class EvaluationFournisseurViewSet(GenericViewSet, ListModelMixin, RetrieveModel
 
     def get_permissions(self):
         if self.action in ('list', 'retrieve'):
-            return [IsAuthenticated(), IsSuperAdminBlocked(), HasRole([Role.ADMIN, Role.SUPERVISEUR])]
-        return [IsAuthenticated(), IsSuperAdminBlocked(), HasRole([Role.ADMIN])]
+            return [IsAuthenticated(), IsSuperAdminBlocked(), HasAnyRole(Role.ADMIN, Role.SUPERVISEUR)()]
+        return [IsAuthenticated(), IsSuperAdminBlocked(), HasAnyRole(Role.ADMIN)()]
 
     def get_queryset(self):
         qs = EvaluationFournisseur.objects.select_related(

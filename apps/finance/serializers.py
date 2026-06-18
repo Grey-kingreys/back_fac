@@ -77,14 +77,35 @@ class SessionCaisseListSerializer(serializers.ModelSerializer):
     caissier_nom = serializers.CharField(source='caissier.get_full_name', read_only=True)
     fermee_par_nom = serializers.CharField(source='fermee_par.get_full_name', read_only=True, allow_null=True)
     statut_label = serializers.CharField(source='get_statut_display', read_only=True)
+    nombre_transactions = serializers.SerializerMethodField()
+    total_entrees = serializers.SerializerMethodField()
+    total_sorties = serializers.SerializerMethodField()
 
     class Meta:
         model = SessionCaisse
         fields = ['id', 'caisse', 'caisse_nom', 'caissier', 'caissier_nom',
                   'statut', 'statut_label', 'solde_ouverture',
                   'solde_fermeture_theorique', 'solde_fermeture_reel',
-                  'ecart', 'ouvert_le', 'ferme_le', 'fermee_par', 'fermee_par_nom']
+                  'ecart', 'ouvert_le', 'ferme_le', 'fermee_par', 'fermee_par_nom',
+                  'nombre_transactions', 'total_entrees', 'total_sorties']
         read_only_fields = fields
+
+    def get_nombre_transactions(self, obj):
+        return obj.transactions.count()
+
+    def get_total_entrees(self, obj):
+        from django.db.models import Sum
+        result = obj.transactions.filter(
+            type_transaction__in=['entree', 'vente', 'approvisionnement', 'remboursement']
+        ).aggregate(total=Sum('montant'))['total']
+        return result or 0
+
+    def get_total_sorties(self, obj):
+        from django.db.models import Sum
+        result = obj.transactions.filter(
+            type_transaction__in=['sortie', 'retrait']
+        ).aggregate(total=Sum('montant'))['total']
+        return result or 0
 
 
 class SessionCaisseDetailSerializer(serializers.ModelSerializer):

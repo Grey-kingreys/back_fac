@@ -15,7 +15,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.accounts.models import Role
-from apps.accounts.permissions import HasRole
+from apps.accounts.permissions import HasAnyRole, HasRole
 
 
 ANALYTICS_ROLES = [Role.ADMIN, Role.SUPERVISEUR]
@@ -39,7 +39,7 @@ def _parse_dates(request):
 class AnalyticsVentesView(APIView):
 
     def get_permissions(self):
-        return [IsAuthenticated(), HasRole(ANALYTICS_ROLES)]
+        return [IsAuthenticated(), HasAnyRole(*ANALYTICS_ROLES)()]
 
     @extend_schema(summary="CA par période, par dépôt/zone", responses={200: OpenApiTypes.OBJECT})
     def get(self, request):
@@ -93,7 +93,7 @@ class AnalyticsVentesView(APIView):
 class AnalyticsStockView(APIView):
 
     def get_permissions(self):
-        return [IsAuthenticated(), HasRole(ANALYTICS_ROLES)]
+        return [IsAuthenticated(), HasAnyRole(*ANALYTICS_ROLES)()]
 
     @extend_schema(summary="Rotation stocks, produits en alerte, top produits", responses={200: OpenApiTypes.OBJECT})
     def get(self, request):
@@ -149,7 +149,7 @@ class AnalyticsStockView(APIView):
 class AnalyticsFinanceView(APIView):
 
     def get_permissions(self):
-        return [IsAuthenticated(), HasRole(ANALYTICS_ROLES)]
+        return [IsAuthenticated(), HasAnyRole(*ANALYTICS_ROLES)()]
 
     @extend_schema(summary="Recettes/dépenses, créances clients", responses={200: OpenApiTypes.OBJECT})
     def get(self, request):
@@ -196,7 +196,7 @@ class AnalyticsFinanceView(APIView):
 class AnalyticsTvaView(APIView):
 
     def get_permissions(self):
-        return [IsAuthenticated(), HasRole(ANALYTICS_ROLES)]
+        return [IsAuthenticated(), HasAnyRole(*ANALYTICS_ROLES)()]
 
     @extend_schema(summary="TVA collectée par période", responses={200: OpenApiTypes.OBJECT})
     def get(self, request):
@@ -232,7 +232,7 @@ class AnalyticsTvaView(APIView):
 class AnalyticsPerformanceView(APIView):
 
     def get_permissions(self):
-        return [IsAuthenticated(), HasRole(ANALYTICS_ROLES)]
+        return [IsAuthenticated(), HasAnyRole(*ANALYTICS_ROLES)()]
 
     @extend_schema(summary="Objectifs vs réalisé par dépôt", responses={200: OpenApiTypes.OBJECT})
     def get(self, request):
@@ -273,8 +273,7 @@ class SuperAdminDashboardView(APIView):
 
     def get_permissions(self):
         from apps.accounts.models import Role
-        from apps.accounts.permissions import HasRole
-        return [IsAuthenticated(), HasRole([Role.SUPERADMIN])]
+        return [IsAuthenticated(), HasAnyRole(Role.SUPERADMIN)()]
 
     @extend_schema(summary="Tableau de bord global — toutes companies", responses={200: OpenApiTypes.OBJECT})
     def get(self, request):
