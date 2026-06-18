@@ -28,7 +28,13 @@ from rest_framework.response import Response
 from rest_framework.viewsets import GenericViewSet
 
 from apps.accounts.models import Role
-from apps.accounts.permissions import CompanyFilterMixin, HasAnyRole, HasRole, IsCompanyMember, IsSuperAdminBlocked  # noqa: F401
+from apps.accounts.permissions import (  # noqa: F401
+    CompanyFilterMixin,
+    HasAnyRole,
+    HasRole,
+    IsCompanyMember,
+    IsSuperAdminBlocked,
+)
 
 from .models import Depot, Zone
 from .serializers import (
