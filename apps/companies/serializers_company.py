@@ -137,6 +137,15 @@ class CompanyCreateSerializer(serializers.ModelSerializer):
             # 1. Créer la company
             company = Company.objects.create(**validated_data)
 
+            # 1bis. Caisse Entreprise (permanente) — ouverte dès la création.
+            # L'admin la configurera à sa première connexion. Niveau racine de
+            # la hiérarchie des caisses (jamais fermée).
+            from apps.finance.models import CaisseEntreprise
+            CaisseEntreprise.objects.get_or_create(
+                company=company,
+                defaults={'nom': f"Caisse {company.name}", 'devise': 'GNF'},
+            )
+
             # 2. Créer l'utilisateur Admin
             admin_user = User.objects.create_user(
                 email=email_admin,

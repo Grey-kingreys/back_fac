@@ -23,6 +23,15 @@ _audit_context = threading.local()
 
 
 def get_current_user():
+    # Lecture PARESSEUSE : avec JWT/DRF, l'authentification a lieu DANS la vue
+    # (après le middleware). On lit donc request.user au moment où le signal se
+    # déclenche (pendant la vue), où l'utilisateur est bien résolu.
+    req = getattr(_audit_context, 'request', None)
+    if req is not None:
+        user = getattr(req, 'user', None)
+        if user is not None and getattr(user, 'is_authenticated', False):
+            return user
+    # Fallback : utilisateur posé explicitement (sessions Django classiques).
     return getattr(_audit_context, 'user', None)
 
 
@@ -30,14 +39,16 @@ def get_current_ip():
     return getattr(_audit_context, 'ip', None)
 
 
-def set_audit_context(user, ip):
+def set_audit_context(ip, user=None, request=None):
     _audit_context.user = user
     _audit_context.ip = ip
+    _audit_context.request = request
 
 
 def clear_audit_context():
     _audit_context.user = None
     _audit_context.ip = None
+    _audit_context.request = None
 
 
 # ---------------------------------------------------------------------------

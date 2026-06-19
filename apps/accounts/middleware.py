@@ -43,11 +43,11 @@ class AuditMiddleware:
         # Import différé pour éviter les imports circulaires au démarrage
         from .signals import clear_audit_context, set_audit_context
 
-        user = getattr(request, 'user', None)
-        if user and not user.is_authenticated:
-            user = None
-
-        set_audit_context(user=user, ip=_get_client_ip(request))
+        # On passe le `request` (pas l'utilisateur figé) : avec JWT/DRF, l'auth
+        # se fait dans la vue, donc request.user n'est résolu qu'à ce moment-là.
+        # get_current_user() lira request.user paresseusement quand le signal
+        # se déclenchera (pendant la vue).
+        set_audit_context(ip=_get_client_ip(request), request=request)
         try:
             response = self.get_response(request)
         finally:
