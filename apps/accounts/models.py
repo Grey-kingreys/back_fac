@@ -163,6 +163,22 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="Date de création")
     updated_at = models.DateTimeField(auto_now=True, verbose_name="Dernière modification")
 
+    # ── Suppression logique (tombstone) ───────────────────────────────────────
+    # Un utilisateur « supprimé » garde sa ligne en base (l'historique — ventes,
+    # caisses, audit… — continue d'y pointer, donc nom + email restent lisibles)
+    # mais disparaît de toutes les listes. Distinct de is_active=False
+    # (= désactivé, encore visible et réactivable).
+    is_deleted = models.BooleanField(default=False, verbose_name="Supprimé")
+    deleted_at = models.DateTimeField(null=True, blank=True, verbose_name="Date de suppression")
+    deleted_by = models.ForeignKey(
+        'self',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='deleted_users',
+        verbose_name="Supprimé par",
+    )
+
     objects = CustomUserManager()
 
     USERNAME_FIELD = 'email'
