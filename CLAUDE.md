@@ -1,28 +1,27 @@
 # DjoulaGest — Mémoire Backend
 
-**Dernière mise à jour :** 18/06/2026 — Audit complet + toutes corrections R-series appliquées  
-**État CI :** ⚠️ Migrations NON générées — voir tableau ci-dessous · 142 tests accounts + tests Sprint 12 écrits  
-**Deadline projet :** 20/06/2026 — **2 jours restants**
+**Dernière mise à jour :** 19/06/2026 — Suppression utilisateurs (tombstone) + audit migrations  
+**État CI :** ✅ Toutes les migrations sont générées et commitées · 142 tests accounts + tests Sprint 12 écrits  
+**Deadline projet :** 20/06/2026 — **1 jour restant**
 
 ---
 
-## ⚠️ Migrations en attente — À générer AVANT tout `docker compose up`
+## ✅ Migrations — toutes générées et commitées
 
-```bash
-docker compose exec web python manage.py makemigrations finance accounts stocks ventes logistique produits
-docker compose exec web python manage.py migrate
-```
+> **Rien à générer.** Tous les changements de modèles ont déjà leur fichier de migration commité.
+> Le déploiement applique `migrate` **automatiquement** au démarrage ([docker/entrypoint.sh](docker/entrypoint.sh)
+> étape 3 — `makemigrations` n'est exécuté qu'en dev si `RUN_MAKEMIGRATIONS=true`).
+> Donc : écrire/commiter un fichier de migration suffit, le déploiement l'applique seul.
 
-| App | Champ(s) ajouté(s) |
-|-----|---------------------|
-| `finance` | `DepenseOperationnelle.is_deleted` (BooleanField) + `deleted_at` (DateTimeField null) |
-| `finance` | **`ConfigurationCaisse`** (nouveau modèle — migration `0006` écrite manuellement) |
-| `accounts` | `CustomUser.first_login_done` default=False (était True) |
-| `accounts` | **`CustomUser.zone`** FK nullable vers Zone (pour rôle superviseur — migration `0007` à générer) |
-| `stocks` | `UniqueConstraint(company, numero)` sur `TransfertStock` + `Inventaire` |
-| `ventes` | `UniqueConstraint(company, numero)` sur `Commande` + `Devis` |
-| `logistique` | `UniqueConstraint(company, numero)` sur `Mission` |
-| `produits` | `UniqueConstraint(company, numero)` sur `CommandeFournisseur` |
+| App | Dernière(s) migration(s) | Couvre |
+|-----|--------------------------|--------|
+| `accounts` | `0007`, `0008`, `0009` | `zone` ; `first_login_done` ; **`is_deleted`+`deleted_at`+`deleted_by` (suppression tombstone)** |
+| `finance` | `0005`, `0006` | `DepenseOperationnelle.is_deleted`+`deleted_at` ; `ConfigurationCaisse` |
+| `stocks` | `0003` | `UniqueConstraint(company, numero)` sur `TransfertStock` + `Inventaire` |
+| `ventes` | `0003` | `UniqueConstraint(company, numero)` sur `Commande` + `Devis` |
+| `logistique` | `0006` | `UniqueConstraint(company, numero)` sur `Mission` |
+| `produits` | `0003` | `UniqueConstraint(company, numero)` sur `CommandeFournisseur` |
+| `companies` | `0006` | codes uniques par company/zone |
 
 ---
 
@@ -32,10 +31,10 @@ docker compose exec web python manage.py migrate
 
 ```bash
 # Depuis d:\Souleymane\projet_fac\gestion_multi_sites\codes\backend\
-docker compose exec web isort --check-only --diff .
-docker compose exec web flake8 .
-docker compose exec web python manage.py migrate
-docker compose exec web pytest
+docker compose exec backend isort --check-only --diff .
+docker compose exec backend flake8 .
+docker compose exec backend python manage.py migrate
+docker compose exec backend pytest
 ```
 
 Ne jamais utiliser `pip`, `python`, `isort`, `flake8` directement en local — ils ne sont pas disponibles.
@@ -124,7 +123,9 @@ Préfixe commun : `/api/`
 | Méthode | URL |
 |---------|-----|
 | GET/POST | `/users/` |
-| GET/PATCH/DELETE | `/users/{id}/` |
+| GET/PATCH | `/users/{id}/` |
+| DELETE | `/users/{id}/` — **Désactiver** (soft, `is_active=False`, réactivable via PATCH) |
+| DELETE | `/users/{id}/supprimer/` — **Supprimer** : purge si aucun historique, sinon archivage tombstone (`is_deleted=True`, retiré des listes, nom+email conservés sur l'historique). Migration `accounts/0009`. |
 | POST | `/users/{id}/reset-password/` |
 | GET | `/audit-logs/` |
 | GET | `/login-logs/` |

@@ -12,6 +12,9 @@ Endpoints :
 """
 
 from django.contrib.auth import get_user_model
+from django.db import transaction
+from django.db.models import ProtectedError
+from django.utils import timezone
 
 from drf_spectacular.utils import OpenApiParameter, OpenApiResponse, extend_schema
 from rest_framework import status
@@ -88,7 +91,8 @@ class UserViewSet(CompanyFilterMixin, GenericViewSet, ListModelMixin, RetrieveMo
         Filtre de base par company (via CompanyFilterMixin),
         puis filtres additionnels via query params.
         """
-        qs = super().get_queryset()
+        # Les utilisateurs supprimés (tombstone) sont masqués partout.
+        qs = super().get_queryset().filter(is_deleted=False)
 
         role = self.request.query_params.get('role')
         depot = self.request.query_params.get('depot')
@@ -175,8 +179,13 @@ class UserViewSet(CompanyFilterMixin, GenericViewSet, ListModelMixin, RetrieveMo
 
     # ── DELETE /api/users/{id}/ ──────────────────────────────────────────────
     @extend_schema(
-        summary="Désactiver un utilisateur (soft delete)",
-        description="Ne supprime pas l'utilisateur — passe is_active à False.",
+        summary="Désactiver un utilisateur",
+        description=(
+            "Désactivation (soft) : l'utilisateur ne peut plus se connecter mais "
+            "reste visible (badge « Inactif ») et réactivable. Ses données et son "
+            "historique sont conservés. Pour le retirer des listes, voir l'action "
+            "« supprimer »."
+        ),
         responses={
             200: OpenApiResponse(description="Utilisateur désactivé"),
             400: OpenApiResponse(description="Impossible de se désactiver soi-même"),
@@ -187,7 +196,6 @@ class UserViewSet(CompanyFilterMixin, GenericViewSet, ListModelMixin, RetrieveMo
         instance = self.get_object()
         self._check_company(request, instance)
 
-        # Empêcher l'admin de se désactiver lui-même
         if instance == request.user:
             return Response(
                 {'detail': "Vous ne pouvez pas désactiver votre propre compte."},
@@ -200,6 +208,63 @@ class UserViewSet(CompanyFilterMixin, GenericViewSet, ListModelMixin, RetrieveMo
             {'detail': f"L'utilisateur {instance.get_full_name()} a été désactivé."},
             status=status.HTTP_200_OK,
         )
+
+    # ── DELETE /api/users/{id}/supprimer/ ────────────────────────────────────
+    @extend_schema(
+        summary="Supprimer un utilisateur",
+        description=(
+            "Suppression. Si l'utilisateur n'a aucun historique lié, sa ligne est "
+            "physiquement supprimée. Sinon (ventes, caisses, mouvements… le "
+            "référencent), il est archivé : retiré de toutes les listes mais sa "
+            "ligne est conservée pour la traçabilité (nom + email restent lisibles "
+            "sur l'historique). Dans les deux cas il disparaît des listes."
+        ),
+        responses={
+            200: OpenApiResponse(description="Utilisateur supprimé ou archivé"),
+            400: OpenApiResponse(description="Impossible de se supprimer soi-même"),
+            403: OpenApiResponse(description="Accès refusé"),
+        },
+    )
+    @action(detail=True, methods=['delete'], url_path='supprimer')
+    def supprimer(self, request, pk=None):
+        instance = self.get_object()
+        self._check_company(request, instance)
+
+        if instance == request.user:
+            return Response(
+                {'detail': "Vous ne pouvez pas supprimer votre propre compte."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        label = instance.get_full_name()
+
+        # Tentative de suppression physique : ne réussit que si AUCUN enregistrement
+        # protégé (FK PROTECT : ventes, caisses, stocks…) ne référence l'utilisateur.
+        try:
+            with transaction.atomic():
+                instance.delete()
+            return Response(
+                {'detail': f"L'utilisateur {label} a été définitivement supprimé."},
+                status=status.HTTP_200_OK,
+            )
+        except ProtectedError:
+            # L'utilisateur a un historique → archivage (tombstone) pour préserver
+            # la traçabilité : la ligne reste, l'historique garde nom + email.
+            instance.is_deleted = True
+            instance.is_active = False
+            instance.deleted_at = timezone.now()
+            instance.deleted_by = request.user
+            instance.save(update_fields=['is_deleted', 'is_active', 'deleted_at', 'deleted_by'])
+            return Response(
+                {
+                    'detail': (
+                        f"L'utilisateur {label} a été supprimé. Son historique "
+                        "(nom et email inclus) est conservé pour la traçabilité."
+                    ),
+                    'archived': True,
+                },
+                status=status.HTTP_200_OK,
+            )
 
     # ── POST /api/users/{id}/reset-password/ ─────────────────────────────────
     @extend_schema(
