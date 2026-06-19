@@ -154,11 +154,27 @@ class MissionViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
         except CustomUser.DoesNotExist:
             raise ValidationError({'chauffeur': "Chauffeur introuvable."})
 
+        depot_depart = depot_arrivee = client = fournisseur = None
         try:
-            depot_depart = Depot.objects.get(pk=d['depot_depart'], is_active=True)
-            depot_arrivee = Depot.objects.get(pk=d['depot_arrivee'], is_active=True)
+            if d.get('depot_depart'):
+                depot_depart = Depot.objects.get(pk=d['depot_depart'], is_active=True)
+            if d.get('depot_arrivee'):
+                depot_arrivee = Depot.objects.get(pk=d['depot_arrivee'], is_active=True)
         except Depot.DoesNotExist:
             raise ValidationError("Dépôt(s) introuvable(s) ou inactif(s).")
+
+        if d.get('client'):
+            from apps.ventes.models import Client
+            try:
+                client = Client.objects.get(pk=d['client'], company=company)
+            except Client.DoesNotExist:
+                raise ValidationError({'client': "Client introuvable."})
+        if d.get('fournisseur'):
+            from apps.produits.models import Fournisseur
+            try:
+                fournisseur = Fournisseur.objects.get(pk=d['fournisseur'], company=company)
+            except Fournisseur.DoesNotExist:
+                raise ValidationError({'fournisseur': "Fournisseur introuvable."})
 
         transfert = None
         if d.get('transfert_stock'):
@@ -172,6 +188,7 @@ class MissionViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
         mission = Mission.objects.create(
             company=company, vehicule=vehicule, chauffeur=chauffeur,
             depot_depart=depot_depart, depot_arrivee=depot_arrivee,
+            client=client, fournisseur=fournisseur,
             type_mission=d.get('type_mission', Mission.TypeMission.TRANSFERT),
             date_depart_prevue=d.get('date_depart_prevue'),
             notes=d.get('notes', ''),
@@ -402,9 +419,13 @@ class MissionViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
             f"Chauffeur : {mission.chauffeur.get_full_name()}", styles['Normal']))
         elements.append(Paragraph(
             f"Véhicule : {mission.vehicule.immatriculation}", styles['Normal']))
+        # Origine / destination selon le type (dépôt, client ou fournisseur).
+        origine = mission.depot_depart.code if mission.depot_depart else (
+            mission.fournisseur.nom if mission.fournisseur else "—")
+        destination = mission.depot_arrivee.code if mission.depot_arrivee else (
+            str(mission.client) if mission.client else "—")
         elements.append(Paragraph(
-            f"De : {mission.depot_depart.code} → {mission.depot_arrivee.code}",
-            styles['Normal']))
+            f"De : {origine} → {destination}", styles['Normal']))
 
         data = [["Référence", "Produit", "Qté envoyée", "Qté reçue"]]
         for ligne in mission.lignes.select_related('produit'):

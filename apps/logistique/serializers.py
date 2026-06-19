@@ -63,46 +63,70 @@ class PositionGPSSerializer(serializers.ModelSerializer):
 
 class MissionListSerializer(serializers.ModelSerializer):
     statut_label = serializers.CharField(source='get_statut_display', read_only=True)
+    type_label = serializers.CharField(source='get_type_mission_display', read_only=True)
     vehicule_immat = serializers.CharField(
         source='vehicule.immatriculation', read_only=True)
     chauffeur_nom = serializers.CharField(
         source='chauffeur.get_full_name', read_only=True)
-    depot_depart_nom = serializers.CharField(source='depot_depart.name', read_only=True)
-    depot_arrivee_nom = serializers.CharField(source='depot_arrivee.name', read_only=True)
+    depot_depart_nom = serializers.CharField(source='depot_depart.name', read_only=True, default=None)
+    depot_arrivee_nom = serializers.CharField(source='depot_arrivee.name', read_only=True, default=None)
+    client_nom = serializers.SerializerMethodField()
+    fournisseur_nom = serializers.SerializerMethodField()
 
     class Meta:
         model = Mission
         fields = [
             'id', 'numero', 'statut', 'statut_label',
+            'type_mission', 'type_label',
             'vehicule', 'vehicule_immat',
             'chauffeur', 'chauffeur_nom',
             'depot_depart', 'depot_depart_nom',
             'depot_arrivee', 'depot_arrivee_nom',
+            'client', 'client_nom',
+            'fournisseur', 'fournisseur_nom',
             'date_depart_prevue', 'date_depart_reelle', 'date_arrivee_reelle',
             'created_at',
         ]
         read_only_fields = fields
 
+    def get_client_nom(self, obj):
+        return str(obj.client) if obj.client_id else None
+
+    def get_fournisseur_nom(self, obj):
+        return obj.fournisseur.nom if obj.fournisseur_id else None
+
 
 class MissionDetailSerializer(serializers.ModelSerializer):
     statut_label = serializers.CharField(source='get_statut_display', read_only=True)
+    type_label = serializers.CharField(source='get_type_mission_display', read_only=True)
     vehicule_immat = serializers.CharField(
         source='vehicule.immatriculation', read_only=True)
     chauffeur_nom = serializers.CharField(
         source='chauffeur.get_full_name', read_only=True)
-    depot_depart_nom = serializers.CharField(source='depot_depart.name', read_only=True)
-    depot_arrivee_nom = serializers.CharField(source='depot_arrivee.name', read_only=True)
+    depot_depart_nom = serializers.CharField(source='depot_depart.name', read_only=True, default=None)
+    depot_arrivee_nom = serializers.CharField(source='depot_arrivee.name', read_only=True, default=None)
+    client_nom = serializers.SerializerMethodField()
+    fournisseur_nom = serializers.SerializerMethodField()
     lignes = LigneMissionSerializer(many=True, read_only=True)
     derniere_position = serializers.SerializerMethodField()
+
+    def get_client_nom(self, obj):
+        return str(obj.client) if obj.client_id else None
+
+    def get_fournisseur_nom(self, obj):
+        return obj.fournisseur.nom if obj.fournisseur_id else None
 
     class Meta:
         model = Mission
         fields = [
             'id', 'numero', 'statut', 'statut_label',
+            'type_mission', 'type_label',
             'vehicule', 'vehicule_immat',
             'chauffeur', 'chauffeur_nom',
             'depot_depart', 'depot_depart_nom',
             'depot_arrivee', 'depot_arrivee_nom',
+            'client', 'client_nom',
+            'fournisseur', 'fournisseur_nom',
             'transfert_stock', 'date_depart_prevue',
             'date_depart_reelle', 'date_arrivee_reelle',
             'notes', 'motif_litige', 'signature_arrivee',
@@ -125,8 +149,11 @@ class MissionDetailSerializer(serializers.ModelSerializer):
 class MissionCreateSerializer(serializers.Serializer):
     vehicule = serializers.IntegerField()
     chauffeur = serializers.IntegerField()
-    depot_depart = serializers.IntegerField()
-    depot_arrivee = serializers.IntegerField()
+    # Dépôts/Client/Fournisseur : requis selon le type (voir validate()).
+    depot_depart = serializers.IntegerField(required=False, allow_null=True)
+    depot_arrivee = serializers.IntegerField(required=False, allow_null=True)
+    client = serializers.IntegerField(required=False, allow_null=True)
+    fournisseur = serializers.IntegerField(required=False, allow_null=True)
     type_mission = serializers.ChoiceField(
         choices=Mission.TypeMission.choices,
         default=Mission.TypeMission.TRANSFERT,
@@ -135,6 +162,33 @@ class MissionCreateSerializer(serializers.Serializer):
     notes = serializers.CharField(required=False, allow_blank=True)
     lignes = LigneMissionInputSerializer(many=True, required=False)
     transfert_stock = serializers.IntegerField(required=False, allow_null=True)
+
+    def validate(self, attrs):
+        """Champs requis selon le type de mission :
+        - transfert  : dépôt départ + dépôt arrivée
+        - livraison  : dépôt départ (source) + client
+        - enlevement : fournisseur + dépôt arrivée (destination)
+        """
+        t = attrs.get('type_mission', Mission.TypeMission.TRANSFERT)
+        errors = {}
+        if t == Mission.TypeMission.TRANSFERT:
+            if not attrs.get('depot_depart'):
+                errors['depot_depart'] = "Dépôt de départ requis pour un transfert."
+            if not attrs.get('depot_arrivee'):
+                errors['depot_arrivee'] = "Dépôt d'arrivée requis pour un transfert."
+        elif t == Mission.TypeMission.LIVRAISON:
+            if not attrs.get('depot_depart'):
+                errors['depot_depart'] = "Dépôt source requis pour une livraison."
+            if not attrs.get('client'):
+                errors['client'] = "Client requis pour une livraison."
+        elif t == Mission.TypeMission.ENLEVEMENT:
+            if not attrs.get('fournisseur'):
+                errors['fournisseur'] = "Fournisseur requis pour un enlèvement."
+            if not attrs.get('depot_arrivee'):
+                errors['depot_arrivee'] = "Dépôt d'arrivée requis pour un enlèvement."
+        if errors:
+            raise serializers.ValidationError(errors)
+        return attrs
 
 
 class SignatureArriveeSerializer(serializers.Serializer):

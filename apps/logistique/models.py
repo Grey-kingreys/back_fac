@@ -103,13 +103,26 @@ class Mission(models.Model):
         settings.AUTH_USER_MODEL, on_delete=models.PROTECT,
         related_name='missions_conduites', verbose_name=_("Chauffeur"),
     )
+    # Dépôts nullables : seul le TRANSFERT a départ ET arrivée. La LIVRAISON
+    # part d'un dépôt vers un client ; l'ENLÈVEMENT vient d'un fournisseur vers
+    # un dépôt d'arrivée. (Validation par type dans le serializer.)
     depot_depart = models.ForeignKey(
-        'companies.Depot', on_delete=models.PROTECT,
+        'companies.Depot', on_delete=models.PROTECT, null=True, blank=True,
         related_name='missions_depart', verbose_name=_("Dépôt départ"),
     )
     depot_arrivee = models.ForeignKey(
-        'companies.Depot', on_delete=models.PROTECT,
+        'companies.Depot', on_delete=models.PROTECT, null=True, blank=True,
         related_name='missions_arrivee', verbose_name=_("Dépôt arrivée"),
+    )
+    # Destinataire d'une LIVRAISON client.
+    client = models.ForeignKey(
+        'ventes.Client', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='missions', verbose_name=_("Client (livraison)"),
+    )
+    # Origine d'un ENLÈVEMENT fournisseur.
+    fournisseur = models.ForeignKey(
+        'produits.Fournisseur', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='missions', verbose_name=_("Fournisseur (enlèvement)"),
     )
     statut = models.CharField(
         _("Statut"), max_length=20, choices=Statut.choices, default=Statut.PLANIFIEE,
