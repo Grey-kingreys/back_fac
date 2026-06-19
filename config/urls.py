@@ -14,8 +14,15 @@ from drf_spectacular.views import (
     SpectacularSwaggerView,
 )
 
+from config.deeplinks import assetlinks, first_login_web, reset_password_web
+
 
 urlpatterns = [
+    # --- Deep links Android (App Links) + repli web ---
+    path(".well-known/assetlinks.json", assetlinks),
+    path("first-login", first_login_web),
+    path("reset-password", reset_password_web),
+
     # Admin Django
     path("admin/", admin.site.urls),
 

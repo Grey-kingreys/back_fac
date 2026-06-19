@@ -118,6 +118,10 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "config.wsgi.application"
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:4200")
+# Domaine servant les App Links Android (assetlinks.json) + repli web.
+# Les liens first-login/reset-password pointent ici : app installée → ouvre
+# l'app ; sinon → redirection vers FRONTEND_URL.
+DEEPLINK_BASE_URL = os.getenv("DEEPLINK_BASE_URL", "https://gestion.kingreys.fr")
 
 # ---------------------------------------------------------------------------
 # Base de données - PostgreSQL

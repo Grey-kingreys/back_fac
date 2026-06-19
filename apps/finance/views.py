@@ -454,6 +454,9 @@ class CaisseEntrepriseViewSet(GenericViewSet, RetrieveModelMixin):
     serializer_class = CaisseEntrepriseSerializer
 
     def get_permissions(self):
+        # Configuration = admin uniquement ; lecture = rôles finance.
+        if self.action == 'configurer':
+            return [IsAuthenticated(), IsSuperAdminBlocked(), HasAnyRole(*FINANCE_WRITE)()]
         return [IsAuthenticated(), IsSuperAdminBlocked(), HasAnyRole(*FINANCE_READ)()]
 
     def get_queryset(self):
@@ -468,6 +471,23 @@ class CaisseEntrepriseViewSet(GenericViewSet, RetrieveModelMixin):
         except CaisseEntreprise.DoesNotExist:
             return Response({'detail': "Aucune caisse entreprise configurée."}, status=404)
         return Response(CaisseEntrepriseSerializer(obj).data)
+
+    @extend_schema(summary="Configurer la caisse entreprise (admin)")
+    @action(detail=False, methods=['patch'], url_path='configurer')
+    def configurer(self, request):
+        # Crée la caisse si elle n'existe pas encore (entreprises créées avant
+        # l'auto-création), puis applique nom / devise.
+        obj, _ = CaisseEntreprise.objects.get_or_create(
+            company=request.user.company,
+            defaults={
+                'nom': f"Caisse {request.user.company.name}",
+                'devise': 'GNF',
+            },
+        )
+        serializer = CaisseEntrepriseSerializer(obj, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data)
 
 
 # ── Versements inter-niveaux ──────────────────────────────────────────────────

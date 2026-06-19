@@ -53,8 +53,9 @@ def send_first_login_email(user, company) -> bool:
         user    : instance CustomUser (role=admin)
         company : instance Company
     """
-    frontend_url = settings.FRONTEND_URL.rstrip("/")
-    first_login_url = f"{frontend_url}/first-login?token={user.first_login_token}"
+    # Lien App Link : ouvre l'app mobile si installée, sinon redirige vers le web.
+    base_url = settings.DEEPLINK_BASE_URL.rstrip("/")
+    first_login_url = f"{base_url}/first-login?token={user.first_login_token}"
     full_name = f"{user.first_name} {user.last_name}".strip() or user.email
 
     html_body = f"""
