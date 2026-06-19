@@ -130,6 +130,11 @@ Préfixe commun : `/api/`
 | GET | `/audit-logs/` |
 | GET | `/login-logs/` |
 
+> **Corrections 19/06 (sans migration) :**
+> - **Audit acteur** : `AuditMiddleware` lisait `request.user` AVANT la vue → avec JWT/DRF (auth dans la vue) tous les logs avaient `user=None` → l'admin (filtré par sa société) ne voyait rien. Corrigé : `set_audit_context(request=...)` + `get_current_user()` lit `request.user` **paresseusement** au moment du signal (`signals.py`, `middleware.py`). L'admin voit maintenant ses propres actions.
+> - **Caisse Entreprise auto-créée** : `CompanyCreateSerializer.create` crée désormais une `CaisseEntreprise` (get_or_create) à la création d'entreprise → l'admin peut la configurer au 1er login.
+> - **Véhicules** : `LOG_WRITE_VEHICLE = [ADMIN, MAINTENANCIER]`.
+
 ### Companies, Zones, Dépôts
 | Méthode | URL | Note |
 |---------|-----|------|
