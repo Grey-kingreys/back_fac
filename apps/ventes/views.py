@@ -66,6 +66,33 @@ def _check_company(request, view, obj):
         raise PermissionDenied("Vous n'avez pas accès à cette ressource.")
 
 
+def _resolve_compte_mobile_money(company, compte_id, mode):
+    """Résout et valide le compte Mobile Money crédité par un paiement de vente.
+
+    Vérifie : appartenance à l'entreprise, compte actif, et opérateur cohérent
+    avec le mode d'encaissement (orange_money / mtn_money). Renvoie None si le
+    mode n'est pas un mode Mobile Money (la validation « obligatoire » est faite
+    par le serializer).
+    """
+    from apps.finance.models import CompteMobileMoney
+
+    MODES_MOBILE_MONEY = {Paiement.Mode.ORANGE_MONEY, Paiement.Mode.MTN_MONEY}
+    if mode not in MODES_MOBILE_MONEY or not compte_id:
+        return None
+    try:
+        compte = CompteMobileMoney.objects.get(
+            pk=compte_id, company=company, is_active=True)
+    except CompteMobileMoney.DoesNotExist:
+        raise ValidationError(
+            {'compte_mobile_money': "Compte Mobile Money introuvable ou inactif."})
+    # Les valeurs Operateur ('orange_money'/'mtn_money') == valeurs Paiement.Mode.
+    if compte.operateur != mode:
+        raise ValidationError(
+            {'compte_mobile_money':
+             "Le compte sélectionné ne correspond pas à l'opérateur du mode de paiement."})
+    return compte
+
+
 class VenteWriteMixin:
     READ_ROLES = [Role.ADMIN, Role.SUPERVISEUR, Role.CAISSIER, Role.COMMERCIAL]
     WRITE_ROLES = [Role.ADMIN, Role.CAISSIER]
@@ -248,6 +275,12 @@ class CommandeViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
             except Client.DoesNotExist:
                 raise ValidationError({'client': "Client introuvable."})
 
+        compte_mm = _resolve_compte_mobile_money(
+            company,
+            d.get('compte_mobile_money'),
+            d.get('mode_paiement_initial', Paiement.Mode.ESPECES),
+        )
+
         try:
             commande = creer_commande(
                 company=company, depot=depot, caissier=request.user,
@@ -259,6 +292,7 @@ class CommandeViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
                 montant_paye=d.get('montant_paye', Decimal('0')),
                 mode_paiement_initial=d.get('mode_paiement_initial', Paiement.Mode.ESPECES),
                 reference_paiement=d.get('reference_paiement', ''),
+                compte_mobile_money=compte_mm,
             )
         except (ValueError, Exception) as e:
             raise ValidationError(str(e))
@@ -275,11 +309,14 @@ class CommandeViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
         s = PaiementInputSerializer(data=request.data)
         s.is_valid(raise_exception=True)
         d = s.validated_data
+        compte_mm = _resolve_compte_mobile_money(
+            request.user.company, d.get('compte_mobile_money'), d['mode'])
         try:
             enregistrer_paiement(
                 commande=commande, montant=d['montant'],
                 mode=d['mode'], caissier=request.user,
                 reference=d.get('reference', ''),
+                compte_mobile_money=compte_mm,
             )
         except ValueError as e:
             raise ValidationError(str(e))

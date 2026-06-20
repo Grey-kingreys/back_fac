@@ -236,6 +236,12 @@ class Paiement(models.Model):
         _("Référence"), max_length=100, blank=True,
         help_text="Numéro de transaction mobile money / virement",
     )
+    compte_mobile_money = models.ForeignKey(
+        'finance.CompteMobileMoney', on_delete=models.PROTECT,
+        null=True, blank=True, related_name='paiements_ventes',
+        verbose_name=_("Compte Mobile Money"),
+        help_text="Compte crédité pour un paiement Orange Money / MTN Money",
+    )
     caissier = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.PROTECT,
         related_name='paiements_saisis', verbose_name=_("Caissier"),
