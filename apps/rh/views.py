@@ -16,8 +16,12 @@ from rest_framework.viewsets import GenericViewSet
 
 from apps.accounts.models import Role
 from apps.accounts.permissions import (
-    CompanyFilterMixin, HasAnyRole, HasRole, IsSuperAdminBlocked,
-    apply_geo_scope, assert_depot_in_scope,
+    CompanyFilterMixin,
+    HasAnyRole,
+    HasRole,
+    IsSuperAdminBlocked,
+    apply_geo_scope,
+    assert_depot_in_scope,
 )
 
 from .models import Conge, Document, Employe, HistoriqueAffectation, ObjectifVente, Presence
@@ -35,16 +39,39 @@ from .serializers import (
 from .utils import haversine_m, point_reference_employe
 
 
-def _employe_du_user(user):
-    """Retourne la fiche Employé liée au compte connecté, ou None."""
+def _employe_du_user(user, create=False):
+    """
+    Retourne la fiche Employé liée au compte connecté.
+
+    Si `create=True` et qu'aucune fiche n'existe, en provisionne une automatiquement
+    à partir du compte (self-service : tout membre d'une entreprise est un employé).
+    Retourne None si l'utilisateur n'a pas d'entreprise (ex. super-administrateur).
+    """
     if not user.company_id:
         return None
-    return (
+    emp = (
         Employe.objects
-        .filter(user=user, company=user.company)
+        .filter(user=user, company_id=user.company_id)
         .select_related('depot', 'depot__zone')
         .first()
     )
+    if emp or not create:
+        return emp
+    # Auto-provision depuis le compte utilisateur.
+    nom = (user.last_name or '').strip() or (user.email.split('@')[0] if user.email else 'Employé')
+    emp, _ = Employe.objects.get_or_create(
+        user=user,
+        defaults={
+            'company_id': user.company_id,
+            'depot': user.depot,
+            'matricule': f"EMP-{user.id}",
+            'nom': nom,
+            'prenom': (user.first_name or '').strip(),
+            'email': user.email or '',
+            'telephone': getattr(user, 'phone', '') or '',
+        },
+    )
+    return emp
 
 
 RH_READ = [Role.ADMIN, Role.SUPERVISEUR]
@@ -187,11 +214,11 @@ class PresenceViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
                    request=PresencePointerSerializer)
     @action(detail=False, methods=['post'], url_path='pointer')
     def pointer(self, request):
-        employe = _employe_du_user(request.user)
+        employe = _employe_du_user(request.user, create=True)
         if employe is None:
             raise ValidationError(
-                "Aucune fiche employé n'est liée à votre compte. "
-                "Contactez votre administrateur.")
+                "Votre compte n'est rattaché à aucune entreprise ; "
+                "le pointage est impossible.")
 
         today = timezone.localdate()
         if Presence.objects.filter(employe=employe, date=today).exists():
@@ -231,15 +258,19 @@ class PresenceViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
     @extend_schema(summary="Mon statut de présence du jour")
     @action(detail=False, methods=['get'], url_path='aujourdhui')
     def aujourdhui(self, request):
-        employe = _employe_du_user(request.user)
-        if employe is None:
+        # Tout membre d'une entreprise peut pointer (la fiche est créée au 1ᵉʳ pointage).
+        if not request.user.company_id:
             return Response({
                 'a_fiche_employe': False,
                 'deja_pointe': False,
                 'presence': None,
             })
+        employe = _employe_du_user(request.user)  # sans création (lecture seule)
         today = timezone.localdate()
-        presence = Presence.objects.filter(employe=employe, date=today).first()
+        presence = (
+            Presence.objects.filter(employe=employe, date=today).first()
+            if employe else None
+        )
         return Response({
             'a_fiche_employe': True,
             'deja_pointe': presence is not None,
@@ -250,31 +281,43 @@ class PresenceViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
     @extend_schema(summary="Récapitulatif présences/absences du jour (admin/superviseur)")
     @action(detail=False, methods=['get'], url_path='recap')
     def recap(self, request):
+        from apps.accounts.models import CustomUser, Role
+
         date_str = request.query_params.get('date')
         jour = date_str or timezone.localdate().isoformat()
 
-        # Effectif actif dans le périmètre de l'utilisateur.
-        employes = Employe.objects.filter(
-            company=request.user.company,
-            statut=Employe.Statut.ACTIF,
-        ).select_related('depot')
-        employes = apply_geo_scope(
-            employes, request.user, depot_fields='depot', zone_field='depot__zone')
+        # L'effectif = les UTILISATEURS de l'entreprise rattachés à un dépôt
+        # (les employés sont les comptes de l'entreprise), dans le périmètre du
+        # demandeur. Self-service : présent = a pointé aujourd'hui, absent = sinon.
+        users = (
+            CustomUser.objects
+            .filter(company_id=request.user.company_id, is_active=True,
+                    depot__isnull=False)
+            .exclude(role=Role.SUPERADMIN)
+            .select_related('depot')
+        )
+        users = apply_geo_scope(
+            users, request.user, depot_fields='depot', zone_field='depot__zone')
 
+        # Pointages du jour de ces utilisateurs (via leur fiche employé liée).
         presences = {
-            p.employe_id: p
-            for p in Presence.objects.filter(employe__in=employes, date=jour)
+            p.employe.user_id: p
+            for p in Presence.objects
+            .filter(employe__user__in=users, date=jour)
+            .select_related('employe')
         }
 
         presents, absents = [], []
-        for emp in employes:
-            p = presences.get(emp.id)
+        for u in users:
+            nom = f"{u.first_name} {u.last_name}".strip() or u.email
             ligne = {
-                'employe': emp.id,
-                'employe_nom': emp.nom_complet,
-                'matricule': emp.matricule,
-                'depot_nom': emp.depot.name if emp.depot else None,
+                'user': u.id,
+                'employe': u.id,
+                'employe_nom': nom,
+                'matricule': u.email or '',
+                'depot_nom': u.depot.name if u.depot else None,
             }
+            p = presences.get(u.id)
             if p:
                 ligne.update({
                     'heure_arrivee': p.heure_arrivee,
@@ -342,11 +385,11 @@ class CongeViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
     @extend_schema(summary="Demander un congé (self-service)",
                    request=CongeDemandeSerializer)
     def create(self, request, *args, **kwargs):
-        employe = _employe_du_user(request.user)
+        employe = _employe_du_user(request.user, create=True)
         if employe is None:
             raise ValidationError(
-                "Aucune fiche employé n'est liée à votre compte. "
-                "Contactez votre administrateur.")
+                "Votre compte n'est rattaché à aucune entreprise ; "
+                "la demande de congé est impossible.")
         s = CongeDemandeSerializer(data=request.data)
         s.is_valid(raise_exception=True)
         conge = Conge.objects.create(
