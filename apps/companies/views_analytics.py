@@ -164,8 +164,10 @@ class AnalyticsFinanceView(APIView):
 
         date_debut, date_fin = _parse_dates(request)
 
+        # TransactionCaisse est liée à une SESSION → caisse → company
+        # (pas de FK `caisse` directe).
         tx = TransactionCaisse.objects.filter(
-            caisse__company=company,
+            session__caisse__company=company,
             created_at__date__gte=date_debut,
             created_at__date__lte=date_fin,
         )

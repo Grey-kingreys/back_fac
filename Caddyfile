@@ -1,0 +1,35 @@
+{
+	email {$ACME_EMAIL}
+}
+
+{$DOMAIN} {
+	# --- Fichiers statiques Django (collectstatic) ---
+	handle_path /static/* {
+		root * /srv/static
+		file_server
+	}
+
+	# --- Fichiers media (uploads) ---
+	handle_path /media/* {
+		root * /srv/media
+		file_server
+	}
+
+	# --- Backend Django : API, admin, schema, assetlinks Android, metrics ---
+	# NB : /first-login et /reset-password NE sont PAS ici → ils tombent dans le SPA
+	# Angular (pages web de réinit). Sur Android, l'App Links intercepte au niveau OS
+	# avant le serveur ; /.well-known/assetlinks.json reste servi par Django pour la
+	# vérification de l'App Links.
+	@backend path /api/* /admin /admin/* /.well-known/* /metrics
+	handle @backend {
+		reverse_proxy backend:8000
+	}
+
+	# --- Frontend Angular (SPA) : tout le reste (dont /first-login, /reset-password) ---
+	# try_files renvoie index.html pour les routes client-side (PathLocationStrategy).
+	handle {
+		root * /srv/front
+		try_files {path} /index.html
+		file_server
+	}
+}
