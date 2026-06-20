@@ -233,7 +233,11 @@ class ProduitViewSet(CompanyWriteMixin, CompanyFilterMixin,
         if cat:
             qs = qs.filter(categorie_id=cat)
         if search:
-            qs = qs.filter(Q(nom__icontains=search) | Q(reference__icontains=search))
+            qs = qs.filter(
+                Q(nom__icontains=search)
+                | Q(reference__icontains=search)
+                | Q(code_barre__icontains=search)
+            )
         return qs
 
     def list(self, request, *args, **kwargs):

@@ -108,18 +108,152 @@ class IsOwnerOrCompanyAdmin(permissions.BasePermission):
         return False
 
 
+# ── Isolation géographique par rôle (entreprise → zone → dépôt) ───────────────
+# Périmètre par défaut (cahier des charges / skill gestion-multisites) :
+#   admin → toute l'entreprise · superviseur → sa zone ·
+#   gestionnaire_stock / caissier / commercial / chauffeur → leur dépôt ·
+#   maintenancier → entreprise (la flotte n'a pas de dépôt).
+
+DEPOT_SCOPE_ROLES = (
+    Role.GESTIONNAIRE_STOCK,
+    Role.CAISSIER,
+    Role.COMMERCIAL,
+    Role.CHAUFFEUR,
+)
+
+
+def geo_scope_level(user):
+    """Niveau d'isolation géographique applicable à l'utilisateur selon son rôle."""
+    if user.role == Role.ADMIN:
+        return 'company'
+    if user.role == Role.SUPERVISEUR:
+        return 'zone'
+    if user.role in DEPOT_SCOPE_ROLES:
+        return 'depot'
+    # maintenancier (flotte = entreprise) et tout autre rôle métier non géo-localisé
+    return 'company'
+
+
+def apply_geo_scope(queryset, user, *, depot_fields=None, zone_field=None):
+    """
+    Restreint un queryset (DÉJÀ filtré par company) au périmètre géographique de
+    l'utilisateur selon son rôle.
+
+    - `depot_fields` : chemin ORM (str) ou liste de chemins vers le Dépôt. Une
+      liste produit un filtre OR (modèles à 2 dépôts : transfert, mission).
+    - `zone_field`   : chemin ORM vers la Zone.
+
+    Si la dimension du niveau du rôle est absente du modèle, on retombe sur la
+    dimension disponible la plus proche ; sinon aucun filtre géographique
+    (ressource sans dimension géo, ex. catalogue produits).
+    """
+    from django.db.models import Q
+
+    level = geo_scope_level(user)
+    if level == 'company':
+        return queryset
+
+    if isinstance(depot_fields, str):
+        depot_fields = [depot_fields]
+
+    # Ressource sans dimension géographique (ex. catalogue, zones, utilisateurs) :
+    # aucun filtre dépôt/zone — l'utilisateur voit toute son entreprise.
+    if not depot_fields and not zone_field:
+        return queryset
+
+    if level == 'zone':
+        if not user.zone_id:
+            return queryset.none()
+        if zone_field:
+            return queryset.filter(**{zone_field: user.zone_id})
+        q = Q()
+        for f in depot_fields:
+            q |= Q(**{f + '__zone': user.zone_id})
+        return queryset.filter(q)
+
+    # level == 'depot'
+    if not user.depot_id:
+        return queryset.none()
+    if depot_fields:
+        q = Q()
+        for f in depot_fields:
+            q |= Q(**{f: user.depot_id})
+        return queryset.filter(q)
+    # rôle dépôt sur une ressource zone-only → limité à la zone de son dépôt
+    return queryset.filter(**{zone_field: user.depot.zone_id})
+
+
+def depot_in_scope(user, depot):
+    """Retourne True si `depot` est dans le périmètre de l'utilisateur (sans lever d'exception)."""
+    if depot is None:
+        return True
+    level = geo_scope_level(user)
+    if level == 'company':
+        return getattr(depot.zone, 'company_id', None) == user.company_id
+    if level == 'zone':
+        return depot.zone_id == user.zone_id
+    # level == 'depot'
+    return depot.id == user.depot_id
+
+
+def assert_depot_in_scope(user, depot):
+    """Lève PermissionDenied si `depot` est hors du périmètre d'écriture de l'utilisateur."""
+    from rest_framework.exceptions import PermissionDenied
+
+    if depot is None:
+        return
+    level = geo_scope_level(user)
+    if level == 'company':
+        if getattr(depot.zone, 'company_id', None) != user.company_id:
+            raise PermissionDenied("Ce dépôt n'appartient pas à votre entreprise.")
+        return
+    if level == 'zone':
+        if depot.zone_id != user.zone_id:
+            raise PermissionDenied("Action interdite : ce dépôt est hors de votre zone.")
+        return
+    # level == 'depot'
+    if depot.id != user.depot_id:
+        raise PermissionDenied("Action interdite : ce dépôt n'est pas le vôtre.")
+
+
+def assert_zone_in_scope(user, zone):
+    """Lève PermissionDenied si `zone` est hors du périmètre d'écriture de l'utilisateur."""
+    from rest_framework.exceptions import PermissionDenied
+
+    if zone is None:
+        return
+    level = geo_scope_level(user)
+    if level == 'company':
+        if zone.company_id != user.company_id:
+            raise PermissionDenied("Cette zone n'appartient pas à votre entreprise.")
+        return
+    if level == 'zone':
+        if zone.id != user.zone_id:
+            raise PermissionDenied("Action interdite : zone hors de votre périmètre.")
+        return
+    # level == 'depot' : autorisé seulement sur la zone de son propre dépôt
+    if not (user.depot_id and user.depot.zone_id == zone.id):
+        raise PermissionDenied("Action interdite : zone hors de votre périmètre.")
+
+
 class CompanyFilterMixin:
     """
-    Mixin pour filtrer automatiquement les QuerySets par company, puis par zone
-    pour les superviseurs.
+    Mixin pour filtrer automatiquement les QuerySets par company puis par
+    périmètre géographique du rôle (zone pour le superviseur, dépôt pour les
+    rôles dépôt — voir geo_scope_level / apply_geo_scope).
 
     - `company_lookup_field` : chemin ORM vers la company (défaut : 'company').
     - `zone_lookup_field`    : chemin ORM vers la Zone (ex: 'depot__zone').
-      Si défini, les superviseurs sont restreints à leur zone.
-      Si None, les superviseurs voient toutes les données de la company (ex: catalogue produits).
+    - `depot_lookup_field`   : chemin ORM vers le Dépôt (ex: 'depot').
+    - `depot_lookup_fields`  : liste de chemins Dépôt pour les modèles à 2 dépôts
+      (filtre OR). Prioritaire sur `depot_lookup_field` si défini.
+    Si aucun champ géo n'est pertinent (ex. catalogue produits), laisser à None :
+    les rôles voient alors toute leur entreprise.
     """
     company_lookup_field = 'company'
     zone_lookup_field = None
+    depot_lookup_field = None
+    depot_lookup_fields = None
 
     def check_permissions(self, request):
         """Bloque le superadmin en défense en profondeur avant tout check de rôle."""
@@ -146,13 +280,11 @@ class CompanyFilterMixin:
 
         queryset = queryset.filter(**{self.company_lookup_field: user_company})
 
-        # Scope zone pour les superviseurs (règle CDC : superviseur limité à sa zone)
-        if user.role == Role.SUPERVISEUR and self.zone_lookup_field:
-            if not user.zone:
-                return queryset.none()
-            queryset = queryset.filter(**{self.zone_lookup_field: user.zone})
-
-        return queryset
+        return apply_geo_scope(
+            queryset, user,
+            depot_fields=self.depot_lookup_fields or self.depot_lookup_field,
+            zone_field=self.zone_lookup_field,
+        )
 
 
 class DepotFilterMixin:

@@ -19,7 +19,10 @@ from rest_framework.views import APIView
 from rest_framework.viewsets import GenericViewSet
 
 from apps.accounts.models import Role
-from apps.accounts.permissions import CompanyFilterMixin, HasAnyRole, HasRole, IsCompanyMember, IsSuperAdminBlocked
+from apps.accounts.permissions import (
+    CompanyFilterMixin, HasAnyRole, HasRole, IsCompanyMember, IsSuperAdminBlocked,
+    apply_geo_scope, assert_depot_in_scope,
+)
 
 from .models import (
     Client,
@@ -192,6 +195,9 @@ class CommandeViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
         if not company:
             return qs.none()
         qs = qs.filter(company=company)
+        # Isolation géographique : commercial/caissier limités à leur dépôt,
+        # superviseur à sa zone, admin à toute l'entreprise.
+        qs = apply_geo_scope(qs, user, depot_fields='depot')
 
         depot = self.request.query_params.get('depot')
         statut = self.request.query_params.get('statut')
@@ -227,8 +233,8 @@ class CommandeViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
         except Depot.DoesNotExist:
             raise ValidationError({'depot': "Dépôt introuvable ou inactif."})
 
-        if depot.zone.company != company:
-            raise PermissionDenied("Ce dépôt n'appartient pas à votre entreprise.")
+        # Vérifie entreprise ET périmètre géographique (dépôt/zone) de l'utilisateur.
+        assert_depot_in_scope(request.user, depot)
 
         client = None
         if d.get('client'):
@@ -417,6 +423,7 @@ class DevisViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
         if not company:
             return qs.none()
         qs = qs.filter(company=company)
+        qs = apply_geo_scope(qs, user, depot_fields='depot')
         statut = self.request.query_params.get('statut')
         if statut:
             qs = qs.filter(statut=statut)
@@ -431,8 +438,7 @@ class DevisViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
         if not company:
             raise ValidationError("Pas d'entreprise associée.")
         depot = d['depot']
-        if depot.zone.company != company:
-            raise PermissionDenied("Ce dépôt n'appartient pas à votre entreprise.")
+        assert_depot_in_scope(request.user, depot)
         client = d.get('client')
         if client and client.company != company:
             raise ValidationError({'client': "Client introuvable."})
@@ -516,6 +522,7 @@ class RetourCommandeViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
         if not company:
             return qs.none()
         qs = qs.filter(commande__company=company)
+        qs = apply_geo_scope(qs, user, depot_fields='commande__depot')
         return qs
 
     @extend_schema(summary="Créer un retour commande")
@@ -527,6 +534,8 @@ class RetourCommandeViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
         company = request.user.company
         if commande.company != company:
             raise PermissionDenied("Cette commande n'appartient pas à votre entreprise.")
+        # Caissier limité aux commandes de son dépôt (superviseur : sa zone).
+        assert_depot_in_scope(request.user, commande.depot)
 
         with transaction.atomic():
             from apps.stocks.services import entree_stock

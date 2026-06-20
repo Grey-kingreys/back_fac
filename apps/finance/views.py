@@ -17,7 +17,10 @@ from rest_framework.views import APIView
 from rest_framework.viewsets import GenericViewSet
 
 from apps.accounts.models import Role
-from apps.accounts.permissions import CompanyFilterMixin, HasAnyRole, HasRole, IsSuperAdminBlocked
+from apps.accounts.permissions import (
+    CompanyFilterMixin, HasAnyRole, HasRole, IsSuperAdminBlocked,
+    apply_geo_scope, assert_depot_in_scope,
+)
 
 from .models import (
     CaisseEntreprise,
@@ -123,6 +126,7 @@ class CaissePhysiqueViewSet(CompanyFilterMixin, GenericViewSet,
     queryset = CaissePhysique.objects.select_related('depot').order_by('nom')
     serializer_class = CaissePhysiqueSerializer
     zone_lookup_field = 'depot__zone'
+    depot_lookup_field = 'depot'
 
     def get_permissions(self):
         if self.action in ('list', 'retrieve'):
@@ -346,6 +350,7 @@ class CompteMobileMoneyViewSet(CompanyFilterMixin, GenericViewSet,
     queryset = CompteMobileMoney.objects.select_related('depot').order_by('operateur')
     serializer_class = CompteMobileMoneySerializer
     zone_lookup_field = 'depot__zone'
+    depot_lookup_field = 'depot'
 
     def get_permissions(self):
         if self.action in ('list', 'retrieve', 'transactions'):
@@ -593,10 +598,7 @@ class DepenseOperationnelleViewSet(GenericViewSet, ListModelMixin, RetrieveModel
         if not company:
             return qs.none()
         qs = qs.filter(company=company)
-        if user.role == Role.SUPERVISEUR:
-            if not user.zone:
-                return qs.none()
-            qs = qs.filter(depot__zone=user.zone)
+        qs = apply_geo_scope(qs, user, depot_fields='depot', zone_field='depot__zone')
         categorie = self.request.query_params.get('categorie')
         depot = self.request.query_params.get('depot')
         date_debut = self.request.query_params.get('date_debut')
@@ -615,6 +617,8 @@ class DepenseOperationnelleViewSet(GenericViewSet, ListModelMixin, RetrieveModel
         s = DepenseOperationnelleSerializer(data=request.data, context={'request': request})
         s.is_valid(raise_exception=True)
         company = request.user.company
+        # Caissier limité aux dépenses de son dépôt (superviseur : sa zone).
+        assert_depot_in_scope(request.user, s.validated_data.get('depot'))
         s.save(company=company, enregistre_par=request.user)
         return Response(s.data, status=status.HTTP_201_CREATED)
 

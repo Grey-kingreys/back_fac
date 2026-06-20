@@ -23,6 +23,14 @@ class Company(models.Model):
         verbose_name="Plan d'abonnement"
     )
     settings = models.JSONField(default=dict, blank=True, verbose_name="Paramètres")
+    rayon_presence_m = models.PositiveIntegerField(
+        default=100,
+        verbose_name="Rayon de pointage présence (mètres)",
+        help_text=(
+            "Distance maximale autour du dépôt (ou du point central de la zone) "
+            "pour qu'un pointage de présence soit considéré « dans le périmètre »."
+        ),
+    )
 
     class Meta:
         verbose_name = "Entreprise"

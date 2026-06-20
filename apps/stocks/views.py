@@ -16,7 +16,10 @@ from rest_framework.response import Response
 from rest_framework.viewsets import GenericViewSet
 
 from apps.accounts.models import Role
-from apps.accounts.permissions import CompanyFilterMixin, HasAnyRole, HasRole, IsCompanyMember, IsSuperAdminBlocked
+from apps.accounts.permissions import (
+    CompanyFilterMixin, HasAnyRole, HasRole, IsCompanyMember, IsSuperAdminBlocked,
+    apply_geo_scope, assert_depot_in_scope,
+)
 
 from .models import AjustementStock, Inventaire, LigneInventaire, MouvementStock, StockDepot, TransfertStock
 from .serializers import (
@@ -70,11 +73,7 @@ class StockDepotViewSet(CompanyFilterMixin, GenericViewSet, ListModelMixin, Retr
         if not company:
             return qs.none()
         qs = qs.filter(depot__zone__company=company)
-
-        if user.role == Role.SUPERVISEUR:
-            if not user.zone:
-                return qs.none()
-            qs = qs.filter(depot__zone=user.zone)
+        qs = apply_geo_scope(qs, user, depot_fields='depot', zone_field='depot__zone')
 
         depot = self.request.query_params.get('depot')
         produit = self.request.query_params.get('produit')
@@ -122,10 +121,7 @@ class StockDepotViewSet(CompanyFilterMixin, GenericViewSet, ListModelMixin, Retr
         d = s.validated_data
         company = request.user.company
         depot = d['depot']
-        if depot.zone.company != company:
-            raise PermissionDenied("Ce dépôt n'appartient pas à votre entreprise.")
-        if request.user.role == Role.GESTIONNAIRE_STOCK and request.user.depot and request.user.depot != depot:
-            raise PermissionDenied("Un gestionnaire de stock ne peut agir que sur son propre dépôt.")
+        assert_depot_in_scope(request.user, depot)
         if d['produit'].company != company:
             raise PermissionDenied("Ce produit n'appartient pas à votre entreprise.")
         try:
@@ -154,12 +150,8 @@ class StockDepotViewSet(CompanyFilterMixin, GenericViewSet, ListModelMixin, Retr
         s = SortieStockSerializer(data=request.data)
         s.is_valid(raise_exception=True)
         d = s.validated_data
-        company = request.user.company
         depot = d['depot']
-        if depot.zone.company != company:
-            raise PermissionDenied("Ce dépôt n'appartient pas à votre entreprise.")
-        if request.user.role == Role.GESTIONNAIRE_STOCK and request.user.depot and request.user.depot != depot:
-            raise PermissionDenied("Un gestionnaire de stock ne peut agir que sur son propre dépôt.")
+        assert_depot_in_scope(request.user, depot)
         try:
             mvt = sortie_stock(
                 depot=depot, produit=d['produit'],
@@ -193,11 +185,7 @@ class MouvementStockViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
         if not company:
             return qs.none()
         qs = qs.filter(depot__zone__company=company)
-
-        if user.role == Role.SUPERVISEUR:
-            if not user.zone:
-                return qs.none()
-            qs = qs.filter(depot__zone=user.zone)
+        qs = apply_geo_scope(qs, user, depot_fields='depot', zone_field='depot__zone')
 
         depot = self.request.query_params.get('depot')
         produit = self.request.query_params.get('produit')
@@ -248,14 +236,9 @@ class TransfertStockViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
         if not company:
             return qs.none()
         qs = qs.filter(company=company)
-
-        if user.role == Role.SUPERVISEUR:
-            if not user.zone:
-                return qs.none()
-            from django.db.models import Q
-            qs = qs.filter(
-                Q(depot_source__zone=user.zone) | Q(depot_destination__zone=user.zone)
-            )
+        # Transfert = 2 dépôts : on voit ceux dont la source OU la destination
+        # est dans notre périmètre (zone pour le superviseur, dépôt sinon).
+        qs = apply_geo_scope(qs, user, depot_fields=['depot_source', 'depot_destination'])
 
         statut = self.request.query_params.get('statut')
         if statut:
@@ -280,9 +263,11 @@ class TransfertStockViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
         d = s.validated_data
         company = request.user.company
 
-        for depot in [d['depot_source'], d['depot_destination']]:
-            if depot.zone.company != company:
-                raise PermissionDenied(f"Le dépôt {depot.code} n'appartient pas à votre entreprise.")
+        # La source doit être dans le périmètre de l'utilisateur ; la destination
+        # doit seulement appartenir à l'entreprise (un transfert va vers un autre dépôt).
+        assert_depot_in_scope(request.user, d['depot_source'])
+        if d['depot_destination'].zone.company != company:
+            raise PermissionDenied("Le dépôt destination n'appartient pas à votre entreprise.")
         for ligne in d['lignes']:
             if ligne['produit'].company != company:
                 raise PermissionDenied(f"Le produit {ligne['produit'].reference} n'appartient pas à votre entreprise.")
@@ -375,11 +360,7 @@ class InventaireViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
         if not user.company:
             return qs.none()
         qs = qs.filter(company=user.company)
-
-        if user.role == Role.SUPERVISEUR:
-            if not user.zone:
-                return qs.none()
-            qs = qs.filter(depot__zone=user.zone)
+        qs = apply_geo_scope(qs, user, depot_fields='depot', zone_field='depot__zone')
 
         depot = self.request.query_params.get('depot')
         statut = self.request.query_params.get('statut')
@@ -397,8 +378,7 @@ class InventaireViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
         d = s.validated_data
         depot = d['depot']
         company = request.user.company
-        if depot.zone.company != company:
-            raise PermissionDenied("Ce dépôt n'appartient pas à votre entreprise.")
+        assert_depot_in_scope(request.user, depot)
 
         with transaction.atomic():
             inventaire = Inventaire.objects.create(
@@ -494,11 +474,7 @@ class AjustementStockViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin)
         if not user.company:
             return qs.none()
         qs = qs.filter(company=user.company)
-
-        if user.role == Role.SUPERVISEUR:
-            if not user.zone:
-                return qs.none()
-            qs = qs.filter(depot__zone=user.zone)
+        qs = apply_geo_scope(qs, user, depot_fields='depot', zone_field='depot__zone')
 
         statut = self.request.query_params.get('statut')
         depot = self.request.query_params.get('depot')
@@ -515,8 +491,7 @@ class AjustementStockViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin)
         s.is_valid(raise_exception=True)
         d = s.validated_data
         company = request.user.company
-        if d['depot'].zone.company != company:
-            raise PermissionDenied("Ce dépôt n'appartient pas à votre entreprise.")
+        assert_depot_in_scope(request.user, d['depot'])
         ajustement = AjustementStock.objects.create(
             company=company, demande_par=request.user, **d)
         return Response(AjustementStockSerializer(ajustement).data,

@@ -139,8 +139,9 @@ def caissier_a(db, company_a, depot_a):
 
 
 @pytest.fixture
-def commercial_a(db, company_a):
-    return make_user("commercial_a@test.com", Role.COMMERCIAL, company=company_a)
+def commercial_a(db, company_a, depot_a):
+    # Le personnel opérationnel (commercial) est affecté à un dépôt (hiérarchie CDC).
+    return make_user("commercial_a@test.com", Role.COMMERCIAL, company=company_a, depot=depot_a)
 
 
 @pytest.fixture

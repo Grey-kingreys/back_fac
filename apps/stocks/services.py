@@ -98,9 +98,14 @@ def creer_transfert(company, depot_source, depot_destination,
 
 
 def expedier_transfert(transfert, utilisateur):
-    """Passe le transfert en EN_TRANSIT et débite le dépôt source."""
-    if transfert.statut != TransfertStock.Statut.BROUILLON:
-        raise ValueError("Seul un transfert en brouillon peut être expédié.")
+    """Passe le transfert en EN_TRANSIT et débite le dépôt source.
+
+    Un transfert doit avoir été VALIDÉ (par un superviseur/admin) avant d'être
+    expédié — la validation est une étape obligatoire du workflow CDC
+    (demande → validation → expédition → réception), pas contournable.
+    """
+    if transfert.statut != TransfertStock.Statut.VALIDE:
+        raise ValueError("Seul un transfert validé peut être expédié.")
 
     with transaction.atomic():
         from django.utils import timezone

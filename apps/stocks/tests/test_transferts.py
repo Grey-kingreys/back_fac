@@ -20,6 +20,10 @@ def transfert_url(pk):
     return f"/api/transferts/{pk}/"
 
 
+def transfert_valider_url(pk):
+    return f"/api/transferts/{pk}/valider/"
+
+
 def transfert_expedier_url(pk):
     return f"/api/transferts/{pk}/expedier/"
 
@@ -130,14 +134,18 @@ class TestTransfertWorkflow:
         )
         return t
 
-    def test_expedier_transfert(self, client_gestionnaire_a, transfert):
+    def test_expedier_transfert(self, client_admin_a, client_gestionnaire_a, transfert):
+        # La validation (admin/superviseur) est obligatoire avant l'expédition.
+        assert client_admin_a.post(
+            transfert_valider_url(transfert.id)).status_code == status.HTTP_200_OK
         res = client_gestionnaire_a.post(transfert_expedier_url(transfert.id))
         assert res.status_code == status.HTTP_200_OK
         transfert.refresh_from_db()
         assert transfert.statut == TransfertStock.Statut.EN_TRANSIT
 
-    def test_receptionner_transfert(self, client_gestionnaire_a, transfert):
+    def test_receptionner_transfert(self, client_admin_a, client_gestionnaire_a, transfert):
         from apps.stocks.models import LigneTransfert
+        client_admin_a.post(transfert_valider_url(transfert.id))
         client_gestionnaire_a.post(transfert_expedier_url(transfert.id))
         ligne = LigneTransfert.objects.filter(transfert=transfert).first()
         payload = {
