@@ -380,6 +380,7 @@ class MissionViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
             raise ValidationError({'qr_code': "Ce champ est obligatoire."})
         try:
             import uuid
+
             # Filtre company : un QR d'une autre entreprise est invisible (isolation SaaS).
             mission = Mission.objects.get(
                 qr_code=uuid.UUID(str(qr_value)), company=request.user.company)
