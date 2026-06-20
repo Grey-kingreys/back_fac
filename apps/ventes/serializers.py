@@ -90,12 +90,16 @@ class LigneCommandeInputSerializer(serializers.Serializer):
 class PaiementSerializer(serializers.ModelSerializer):
     mode_label = serializers.CharField(source='get_mode_display', read_only=True)
     caissier_nom = serializers.CharField(source='caissier.get_full_name', read_only=True)
+    compte_mobile_money_numero = serializers.CharField(
+        source='compte_mobile_money.numero', read_only=True, default=None)
 
     class Meta:
         model = Paiement
         fields = ['id', 'montant', 'mode', 'mode_label', 'reference',
+                  'compte_mobile_money', 'compte_mobile_money_numero',
                   'caissier', 'caissier_nom', 'created_at']
-        read_only_fields = ['id', 'mode_label', 'caissier', 'caissier_nom', 'created_at']
+        read_only_fields = ['id', 'mode_label', 'compte_mobile_money_numero',
+                            'caissier', 'caissier_nom', 'created_at']
 
 
 class CommandeListSerializer(serializers.ModelSerializer):
@@ -181,6 +185,7 @@ class CommandeCreateSerializer(serializers.Serializer):
         default=Paiement.Mode.ESPECES,
     )
     reference_paiement = serializers.CharField(required=False, allow_blank=True)
+    compte_mobile_money = serializers.IntegerField(required=False, allow_null=True)
 
     def validate_lignes(self, value):
         if not value:
@@ -188,10 +193,18 @@ class CommandeCreateSerializer(serializers.Serializer):
         return value
 
     def validate(self, attrs):
-        MODES_MOBILE = {Paiement.Mode.ORANGE_MONEY, Paiement.Mode.MTN_MONEY, Paiement.Mode.VIREMENT}
-        if attrs.get('mode_paiement_initial') in MODES_MOBILE and not attrs.get('reference_paiement', '').strip():
+        MODES_REFERENCE = {Paiement.Mode.ORANGE_MONEY, Paiement.Mode.MTN_MONEY, Paiement.Mode.VIREMENT}
+        MODES_MOBILE_MONEY = {Paiement.Mode.ORANGE_MONEY, Paiement.Mode.MTN_MONEY}
+        mode = attrs.get('mode_paiement_initial')
+        if mode in MODES_REFERENCE and not attrs.get('reference_paiement', '').strip():
             raise serializers.ValidationError(
                 {'reference_paiement': "La référence de transaction est obligatoire pour ce mode de paiement."}
+            )
+        # Orange Money / MTN Money : le compte crédité est obligatoire (un paiement
+        # encaissé crédite un compte mobile money précis du dépôt).
+        if mode in MODES_MOBILE_MONEY and not attrs.get('compte_mobile_money'):
+            raise serializers.ValidationError(
+                {'compte_mobile_money': "Sélectionnez le compte Mobile Money crédité pour ce paiement."}
             )
         return attrs
 
@@ -201,12 +214,19 @@ class PaiementInputSerializer(serializers.Serializer):
     montant = serializers.DecimalField(max_digits=14, decimal_places=2, min_value=0.01)
     mode = serializers.ChoiceField(choices=Paiement.Mode.choices)
     reference = serializers.CharField(required=False, allow_blank=True)
+    compte_mobile_money = serializers.IntegerField(required=False, allow_null=True)
 
     def validate(self, attrs):
-        MODES_MOBILE = {Paiement.Mode.ORANGE_MONEY, Paiement.Mode.MTN_MONEY, Paiement.Mode.VIREMENT}
-        if attrs.get('mode') in MODES_MOBILE and not attrs.get('reference', '').strip():
+        MODES_REFERENCE = {Paiement.Mode.ORANGE_MONEY, Paiement.Mode.MTN_MONEY, Paiement.Mode.VIREMENT}
+        MODES_MOBILE_MONEY = {Paiement.Mode.ORANGE_MONEY, Paiement.Mode.MTN_MONEY}
+        mode = attrs.get('mode')
+        if mode in MODES_REFERENCE and not attrs.get('reference', '').strip():
             raise serializers.ValidationError(
                 {'reference': "La référence de transaction est obligatoire pour ce mode de paiement."}
+            )
+        if mode in MODES_MOBILE_MONEY and not attrs.get('compte_mobile_money'):
+            raise serializers.ValidationError(
+                {'compte_mobile_money': "Sélectionnez le compte Mobile Money crédité pour ce paiement."}
             )
         return attrs
 
