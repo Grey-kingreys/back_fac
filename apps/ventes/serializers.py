@@ -98,7 +98,8 @@ class PaiementSerializer(serializers.ModelSerializer):
         fields = ['id', 'montant', 'mode', 'mode_label', 'reference',
                   'compte_mobile_money', 'compte_mobile_money_numero',
                   'caissier', 'caissier_nom', 'created_at']
-        read_only_fields = ['id', 'mode_label', 'compte_mobile_money_numero',
+        read_only_fields = ['id', 'mode_label', 'compte_mobile_money',
+                            'compte_mobile_money_numero',
                             'caissier', 'caissier_nom', 'created_at']
 
 
