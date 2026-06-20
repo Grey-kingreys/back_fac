@@ -6,6 +6,21 @@
 
 ---
 
+## ➕ RH : « employés = utilisateurs » — auto-provision + récap user-based (20/06/2026) — pas de migration
+
+Clarification métier : **les employés sont les utilisateurs de l'entreprise**. Conséquences (`apps/rh/views.py`) :
+- **Auto-provision** : `_employe_du_user(user, create=True)` crée automatiquement une fiche `Employe` à partir
+  du compte (matricule `EMP-{id}`, nom/prénom/dépôt du user) au **premier pointage / première demande de
+  congé**. Plus de blocage « aucune fiche employé ». `GET /presences/aujourdhui/` renvoie
+  `a_fiche_employe=true` dès que le user a une entreprise (la fiche est créée à la volée).
+- **Récap user-based** : `GET /presences/recap/` calcule l'effectif à partir des **`CustomUser`** de
+  l'entreprise rattachés à un dépôt (hors superadmin), dans le périmètre géo du demandeur — et non plus à
+  partir des fiches `Employe`. Présent = a pointé aujourd'hui (via sa fiche liée), absent = sinon. Clés de
+  réponse inchangées (`employe`/`employe_nom`/`matricule`/`depot_nom` + champs géo pour les présents).
+- **Saisie manuelle de présence supprimée côté clients** : la présence est désormais **100 % self-service**
+  (pointage géolocalisé). `POST /presences/` (création manuelle) reste exposé mais n'est plus utilisé par
+  le web/mobile. Diagnostic seul, **aucune migration**.
+
 ## ➕ RH self-service : pointage présence géolocalisé + demande de congé (20/06/2026) — ⚠️ 3 migrations à déployer
 
 Refonte du module RH (présences + congés) pour passer en **self-service**, conforme au CDC §3.10.

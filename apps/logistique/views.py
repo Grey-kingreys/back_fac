@@ -16,8 +16,13 @@ from rest_framework.viewsets import GenericViewSet
 
 from apps.accounts.models import Role
 from apps.accounts.permissions import (
-    CompanyFilterMixin, HasAnyRole, HasRole, IsSuperAdminBlocked,
-    apply_geo_scope, depot_in_scope, geo_scope_level,
+    CompanyFilterMixin,
+    HasAnyRole,
+    HasRole,
+    IsSuperAdminBlocked,
+    apply_geo_scope,
+    depot_in_scope,
+    geo_scope_level,
 )
 
 from .models import (
