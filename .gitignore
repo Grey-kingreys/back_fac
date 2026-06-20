@@ -5,8 +5,11 @@
 # --- Variables d'environnement (NE JAMAIS versionner) ---
 .env
 
-# --- Config serveur locale (chaque environnement a le sien, voir Caddyfile.example) ---
-Caddyfile
+# --- Caddyfile : désormais versionné (paramétré par {$DOMAIN}/{$ACME_EMAIL} via .env,
+#     donc identique sur tous les environnements). Le domaine n'est plus codé en dur. ---
+
+# --- Build du front Angular monté dans Caddy (artefact, pas du code source) ---
+front-dist/
 
 # --- Override Docker local (ports dev) — ne pas versionner ---
 docker-compose.override.yml

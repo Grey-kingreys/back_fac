@@ -221,6 +221,7 @@ services:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - gestion_static_files:/srv/static:ro
       - gestion_media_files:/srv/media:ro
+      - ./front-dist:/srv/front:ro   # build Angular (dist/frontend/browser) déposé ici
       - caddy_data:/data
       - caddy_config:/config
     depends_on:
