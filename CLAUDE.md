@@ -6,6 +6,110 @@
 
 ---
 
+## ➕ RH self-service : pointage présence géolocalisé + demande de congé (20/06/2026) — ⚠️ 3 migrations à déployer
+
+Refonte du module RH (présences + congés) pour passer en **self-service**, conforme au CDC §3.10.
+
+**Présence — pointage géolocalisé.** Nouveaux champs `Presence` : `latitude`, `longitude`, `distance_m`,
+`dans_perimetre` (nullable), `reference_geo` (`depot`/`zone`/`aucune`). Nouveau champ
+`Company.rayon_presence_m` (défaut **100 m**, configurable). Util `apps/rh/utils.py` (`haversine_m`,
+`point_reference_employe` → dépôt s'il a des coords, sinon point central de la zone). Endpoints sur
+`PresenceViewSet` :
+- `POST /presences/pointer/` — **self-service, tout rôle opérationnel** (superadmin bloqué). Déduit la
+  fiche `Employe` du compte (`_employe_du_user`), refuse si déjà pointé aujourd'hui (`unique(employe,date)`),
+  calcule la distance Haversine au point de référence, marque `dans_perimetre = distance <= rayon`. Le
+  pointage est **toujours créé**, même hors zone (juste drapeauté). `heure_arrivee = now`.
+- `GET /presences/aujourdhui/` — `{a_fiche_employe, deja_pointe, presence}` → pilote l'affichage du bouton.
+- `GET /presences/recap/?date=` — admin/superviseur : **présents (avec drapeau hors-site) + absents =
+  effectif actif sans pointage** (absence implicite, pas de job de fin de journée).
+- `POST /presences/` (saisie manuelle admin) conservé inchangé (`RH_WRITE`).
+
+**Congé — demande self-service + validation hiérarchique.** Nouveaux champs `Conge` : `demande_par`,
+`motif_traitement`, `traite_le`.
+- `POST /conges/` est désormais **self-service** (`CongeDemandeSerializer`, l'employé = compte connecté,
+  `employe` n'est plus passé dans le body) → **plus de création « pour autrui » via ce endpoint**.
+- `get_queryset` : admin/superviseur voient tout leur périmètre géo ; les autres rôles **uniquement leurs
+  propres demandes**. Action `GET /conges/mes-demandes/`.
+- `approuver`/`refuser` : **ouverts à `[ADMIN, SUPERVISEUR]`** (avant : admin seul) + **séparation des
+  tâches** (`_verifier_separation` : on ne valide pas sa propre demande) + `motif_traitement`/`traite_le`.
+
+**Notifications.** Types ajoutés `conge_demande`, `conge_rejete`. Signaux : `notifier_conge_demande`
+(création EN_ATTENTE → admins+superviseurs) ; `notifier_conge_traite` (APPROUVE/REFUSE → l'employé, avec
+motif si refus). L'ancien `notifier_conge_approuve` est remplacé par `notifier_conge_traite`.
+
+**Migrations à déployer** (écrites à la main, appliquées auto) : `companies/0007_company_rayon_presence_m`,
+`rh/0003_presence_geofencing_conge_demande`, `notifications/0002_conge_notification_types`.
+→ `git pull && docker compose up -d --build`.
+
+## ➕ Caisses dépôt/zone : OneToOne → ForeignKey + caisses périodiques (20/06/2026) — ⚠️ migration `finance/0007` à déployer
+
+**Problème.** `CaissePhysique.depot` et `CaisseZone.zone` étaient des `OneToOneField` → impossible de
+créer une 2ᵉ caisse pour un dépôt/zone, **même après fermeture définitive** de la 1ʳᵉ (400 « existe
+déjà »). Or une caisse fermée reste en base (§1) et il faut pouvoir en ouvrir une **nouvelle** pour la
+période suivante → dépôt bloqué dès que sa caisse était fermée (symptôme observé : ouverture de session
+impossible, `caisse fermée` → 400 « Caisse introuvable ou inactive »).
+
+**Correctif** (`finance/models.py` + `serializers.py` + migration `finance/0007_caisses_fk_unique_ouverte`) :
+- `depot`/`zone` : `OneToOneField` → `ForeignKey` (`related_name='caisses'`). Le reverse OneToOne
+  (`depot.caisse`/`zone.caisse`) n'était **utilisé nulle part** → changement sans impact code.
+- Contrainte unique **partielle** : `UniqueConstraint(fields=['depot'], condition=Q(statut='ouverte'))`
+  (idem zone) → au plus **une caisse ouverte** par dépôt/zone ; les fermées s'accumulent.
+- Garde-fou serializer (`CaissePhysiqueSerializer`/`CaisseZoneSerializer.validate`) : 400 propre
+  « Ce dépôt/cette zone a déjà une caisse ouverte. Fermez-la avant d'en créer une nouvelle. »
+- Mobile déjà adapté : `getCaisseIdForDepot` ne retient que la caisse **active+ouverte**.
+
+→ migration écrite à la main, appliquée auto au déploiement : `git pull && docker compose up -d --build`.
+
+## ➕ Dépôt obligatoire pour les rôles opérationnels (20/06/2026) — ⚠️ à déployer (pas de migration)
+
+`accounts/serializers.py` : nouvelle constante `DEPOT_BOUND_ROLES` (caissier, commercial, chauffeur,
+gestionnaire_stock, maintenancier). `UserCreateSerializer.validate()` **et**
+`UserUpdateSerializer.validate()` exigent désormais un `depot` pour ces rôles (symétrique de la règle
+superviseur→zone). En PATCH, le dépôt effectif = payload sinon instance. **Pourquoi** : un caissier
+créé sans dépôt avait `depot_id=null` → côté mobile « pas associé à un dépôt » à l'ouverture de session
+de caisse. ⚠️ Effet de bord assumé : un PATCH (ex. réactivation `{is_active:true}`) sur un compte de ces
+rôles **déjà** sans dépôt en base échouera tant qu'on ne lui assigne pas un dépôt — c'est voulu (force
+la correction des données existantes). Validation seule → **aucune migration**, `docker compose up -d --build`.
+
+## ➕ Champ code_barre sur Produit (20/06/2026) — ⚠️ migration à déployer
+
+Ajout `Produit.code_barre` (`CharField max_length=64, blank, default=''`) pour le scan code-barres
+(retrouve un produit en scannant l'EAN/UPC). Migration **`produits/0004_produit_code_barre.py`**
+(écrite à la main, appliquée auto au déploiement). Exposé en lecture+écriture dans
+`ProduitDetailSerializer` et en lecture dans `ProduitListSerializer`. **Recherche** : `ProduitViewSet.get_queryset`
+inclut désormais `Q(code_barre__icontains=search)` → le scanner mobile (`GET /produits/?search=<code>`)
+trouve le produit par son code-barres. **À déployer** (`git pull && docker compose up -d --build`).
+
+## 🚀 Déploiement (VPS) — back + front sur le même domaine
+
+`back_fac` (API) et `front_fac` (Angular) sont servis sur le **même domaine** `gestion.kingreys.fr`
+via le **Caddy** du stack `back_fac` : `/api` → Django, le reste → le SPA Angular monté dans Caddy
+(volume `./front-dist:/srv/front:ro`, voir `docker-compose.yml` + `Caddyfile`).
+
+**Mettre à jour le FRONT (cas le plus fréquent)** — il faut **toujours recopier le build** dans
+`back_fac/front-dist/` (Caddy ne sert que ce dossier). Caddy lit les fichiers en direct → **pas**
+de rebuild d'image ni de `caddy reload` nécessaire.
+
+```bash
+# 1. Récupérer + builder le front
+cd ~/front_fac && git pull origin souleymane && npm ci && npm run build
+
+# 2. Recopier le build dans le dossier servi par Caddy  ← COMMANDE DE COPIE
+cd ~/back_fac && rm -rf front-dist/* && cp -r ../front_fac/dist/frontend/browser/* front-dist/
+# (1ʳᵉ fois seulement, si "Permission denied" : sudo chown -R $USER:$USER front-dist)
+```
+Puis hard-refresh navigateur (Ctrl+Shift+R). C'est tout.
+
+**Mettre à jour le BACK** (code Python) :
+```bash
+cd ~/back_fac && git pull origin souleymane && docker compose up -d --build
+```
+
+**`caddy reload` n'est requis QUE** si on modifie le `Caddyfile` :
+`docker compose exec caddy caddy reload --config /etc/caddy/Caddyfile`
+
+---
+
 ## ✅ Migrations — toutes générées et commitées
 
 > **Rien à générer.** Tous les changements de modèles ont déjà leur fichier de migration commité.

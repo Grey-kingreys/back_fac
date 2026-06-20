@@ -115,6 +115,10 @@ class Produit(models.Model):
         related_name='produits_fournis', verbose_name=_("Fournisseur principal"),
     )
     reference = models.CharField(_("Référence"), max_length=60)
+    code_barre = models.CharField(
+        _("Code-barres"), max_length=64, blank=True, default='',
+        help_text="Code-barres physique (EAN/UPC) scanné pour retrouver le produit",
+    )
     nom = models.CharField(_("Nom"), max_length=255)
     description = models.TextField(_("Description"), blank=True)
     image = models.ImageField(

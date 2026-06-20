@@ -103,9 +103,9 @@ class ProduitListSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Produit
-        fields = ['id', 'reference', 'nom', 'categorie_nom', 'unite_symbole',
-                  'prix_achat', 'prix_vente', 'marge', 'seuil_alerte',
-                  'est_perimable', 'is_active', 'created_at']
+        fields = ['id', 'reference', 'code_barre', 'nom', 'categorie_nom',
+                  'unite_symbole', 'prix_achat', 'prix_vente', 'marge',
+                  'seuil_alerte', 'est_perimable', 'is_active', 'created_at']
         read_only_fields = fields
 
 
@@ -121,7 +121,7 @@ class ProduitDetailSerializer(serializers.ModelSerializer):
     class Meta:
         model = Produit
         fields = [
-            'id', 'reference', 'nom', 'description', 'image',
+            'id', 'reference', 'code_barre', 'nom', 'description', 'image',
             'categorie', 'categorie_nom',
             'unite', 'unite_nom', 'unite_symbole',
             'fournisseur_principal', 'fournisseur_nom',

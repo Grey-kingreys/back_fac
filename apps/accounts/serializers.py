@@ -15,6 +15,19 @@ from apps.companies.models import Depot, Zone
 User = get_user_model()
 
 
+# Rôles opérationnels obligatoirement rattachés à un dépôt (CDC §0 :
+# caissier, commercial, chauffeur, gestionnaire de stock, maintenancier).
+# Sans dépôt, ces comptes ne peuvent pas travailler (ex. ouvrir une session
+# de caisse → « pas associé à un dépôt »).
+DEPOT_BOUND_ROLES = frozenset({
+    Role.CAISSIER,
+    Role.COMMERCIAL,
+    Role.CHAUFFEUR,
+    Role.GESTIONNAIRE_STOCK,
+    Role.MAINTENANCIER,
+})
+
+
 class UserListSerializer(serializers.ModelSerializer):
     """
     Serializer léger pour la liste paginée des utilisateurs.
@@ -177,6 +190,11 @@ class UserCreateSerializer(serializers.ModelSerializer):
         else:
             # Les rôles non-superviseur ne portent pas de zone de supervision
             attrs['zone'] = None
+            # Les rôles opérationnels doivent être affectés à un dépôt
+            if role in DEPOT_BOUND_ROLES and not attrs.get('depot'):
+                raise serializers.ValidationError(
+                    {'depot_id': "Ce rôle doit obligatoirement être affecté à un dépôt."}
+                )
         return attrs
 
     def create(self, validated_data):
@@ -254,6 +272,13 @@ class UserUpdateSerializer(serializers.ModelSerializer):
                 )
             if 'role' in attrs or 'zone' in attrs:
                 attrs['depot'] = None
+        elif role in DEPOT_BOUND_ROLES:
+            # Dépôt effectif après application du PATCH (payload sinon instance).
+            depot = attrs.get('depot', getattr(self.instance, 'depot', None))
+            if not depot:
+                raise serializers.ValidationError(
+                    {'depot_id': "Ce rôle doit obligatoirement être affecté à un dépôt."}
+                )
         return attrs
 
 

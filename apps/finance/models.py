@@ -108,9 +108,9 @@ class CaissePhysique(models.Model):
         'companies.Company', on_delete=models.CASCADE,
         related_name='caisses', verbose_name=_("Entreprise"),
     )
-    depot = models.OneToOneField(
+    depot = models.ForeignKey(
         'companies.Depot', on_delete=models.PROTECT,
-        related_name='caisse', verbose_name=_("Dépôt"),
+        related_name='caisses', verbose_name=_("Dépôt"),
     )
     nom = models.CharField(_("Nom"), max_length=150)
     devise = models.CharField(_("Devise"), max_length=10, default='GNF')
@@ -127,6 +127,16 @@ class CaissePhysique(models.Model):
     class Meta:
         verbose_name = _("Caisse physique")
         verbose_name_plural = _("Caisses physiques")
+        constraints = [
+            # Une caisse fermée reste en base (règle §1), mais il ne peut exister
+            # qu'UNE SEULE caisse OUVERTE par dépôt à la fois. Les caisses fermées
+            # s'accumulent → on peut en ouvrir une nouvelle pour la période suivante.
+            models.UniqueConstraint(
+                fields=['depot'],
+                condition=models.Q(statut='ouverte'),
+                name='unique_caisse_ouverte_par_depot',
+            ),
+        ]
 
     def __str__(self):
         return f"{self.nom} — {self.depot}"
@@ -337,9 +347,9 @@ class CaisseZone(models.Model):
         'companies.Company', on_delete=models.CASCADE,
         related_name='caisses_zone', verbose_name=_("Entreprise"),
     )
-    zone = models.OneToOneField(
+    zone = models.ForeignKey(
         'companies.Zone', on_delete=models.PROTECT,
-        related_name='caisse', verbose_name=_("Zone"),
+        related_name='caisses', verbose_name=_("Zone"),
     )
     nom = models.CharField(_("Nom"), max_length=150)
     devise = models.CharField(_("Devise"), max_length=10, default='GNF')
@@ -356,6 +366,15 @@ class CaisseZone(models.Model):
     class Meta:
         verbose_name = _("Caisse zone")
         verbose_name_plural = _("Caisses zone")
+        constraints = [
+            # Idem CaissePhysique : au plus UNE caisse zone OUVERTE par zone.
+            # Les caisses zone fermées restent en base (règle §1).
+            models.UniqueConstraint(
+                fields=['zone'],
+                condition=models.Q(statut='ouverte'),
+                name='unique_caisse_ouverte_par_zone',
+            ),
+        ]
 
     def __str__(self):
         return f"{self.nom} — {self.zone}"

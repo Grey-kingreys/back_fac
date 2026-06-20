@@ -128,24 +128,59 @@ def notifier_transfert_receptionne(sender, instance, **kwargs):
     )
 
 
-# ── Congé : approuvé ─────────────────────────────────────────────────────────
+# ── Congé : nouvelle demande → alerte admin/superviseur ──────────────────────
 @receiver(post_save, sender='rh.Conge')
-def notifier_conge_approuve(sender, instance, **kwargs):
+def notifier_conge_demande(sender, instance, created, **kwargs):
     from apps.rh.models import Conge
-    if instance.statut != Conge.Statut.APPROUVE:
+    if not created or instance.statut != Conge.Statut.EN_ATTENTE:
+        return
+    company = instance.employe.company
+    destinataires = _admins_superviseurs(company)
+    if not destinataires:
+        return
+    _notifier(
+        destinataires=destinataires,
+        company=company,
+        type_notif='conge_demande',
+        titre="Nouvelle demande de congé",
+        message=(
+            f"{instance.employe.nom_complet} demande un congé "
+            f"({instance.get_type_conge_display().lower()}) du {instance.date_debut} "
+            f"au {instance.date_fin}."
+        ),
+        lien=f"/conges/{instance.pk}/",
+    )
+
+
+# ── Congé : approuvé ou refusé → notifier l'employé ──────────────────────────
+@receiver(post_save, sender='rh.Conge')
+def notifier_conge_traite(sender, instance, created, **kwargs):
+    from apps.rh.models import Conge
+    if created or instance.statut not in (Conge.Statut.APPROUVE, Conge.Statut.REFUSE):
         return
     if not instance.employe.user:
         return
     company = instance.employe.company
+    if instance.statut == Conge.Statut.APPROUVE:
+        type_notif, titre = 'conge_approuve', "Congé approuvé"
+        message = (
+            f"Votre congé du {instance.date_debut} au {instance.date_fin} "
+            f"a été approuvé."
+        )
+    else:
+        type_notif, titre = 'conge_rejete', "Congé refusé"
+        message = (
+            f"Votre congé du {instance.date_debut} au {instance.date_fin} "
+            f"a été refusé."
+        )
+        if instance.motif_traitement:
+            message += f" Motif : {instance.motif_traitement}"
     _notifier(
         destinataires=[instance.employe.user],
         company=company,
-        type_notif='conge_approuve',
-        titre="Congé approuvé",
-        message=(
-            f"Votre congé du {instance.date_debut} au {instance.date_fin} "
-            f"a été approuvé."
-        ),
+        type_notif=type_notif,
+        titre=titre,
+        message=message,
         lien=f"/conges/{instance.pk}/",
     )
 

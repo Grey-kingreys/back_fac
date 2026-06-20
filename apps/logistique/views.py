@@ -15,7 +15,10 @@ from rest_framework.response import Response
 from rest_framework.viewsets import GenericViewSet
 
 from apps.accounts.models import Role
-from apps.accounts.permissions import CompanyFilterMixin, HasAnyRole, HasRole, IsSuperAdminBlocked
+from apps.accounts.permissions import (
+    CompanyFilterMixin, HasAnyRole, HasRole, IsSuperAdminBlocked,
+    apply_geo_scope, depot_in_scope, geo_scope_level,
+)
 
 from .models import (
     ConsommationCarburant,
@@ -111,10 +114,12 @@ class MissionViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
             return qs.none()
         qs = qs.filter(company=company)
         if user.role == Role.CHAUFFEUR:
+            # Le chauffeur ne voit QUE ses propres missions.
             qs = qs.filter(chauffeur=user)
-        elif user.role == Role.GESTIONNAIRE_STOCK and user.depot:
-            from django.db.models import Q
-            qs = qs.filter(Q(depot_depart=user.depot) | Q(depot_arrivee=user.depot))
+        else:
+            # gestionnaire → son dépôt (départ ou arrivée), superviseur → sa zone,
+            # admin/maintenancier → toute l'entreprise.
+            qs = apply_geo_scope(qs, user, depot_fields=['depot_depart', 'depot_arrivee'])
 
         statut = self.request.query_params.get('statut')
         vehicule = self.request.query_params.get('vehicule')
@@ -162,6 +167,16 @@ class MissionViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin):
                 depot_arrivee = Depot.objects.get(pk=d['depot_arrivee'], is_active=True)
         except Depot.DoesNotExist:
             raise ValidationError("Dépôt(s) introuvable(s) ou inactif(s).")
+
+        # Les dépôts doivent appartenir à l'entreprise ; et hors admin/maintenancier,
+        # au moins un dépôt de la mission doit être dans le périmètre de l'utilisateur.
+        for dep in (depot_depart, depot_arrivee):
+            if dep and dep.zone.company_id != company.id:
+                raise ValidationError("Dépôt hors de votre entreprise.")
+        depots_mission = [dep for dep in (depot_depart, depot_arrivee) if dep]
+        if geo_scope_level(request.user) != 'company' and depots_mission \
+                and not any(depot_in_scope(request.user, dep) for dep in depots_mission):
+            raise PermissionDenied("Cette mission ne concerne pas votre périmètre (dépôt/zone).")
 
         if d.get('client'):
             from apps.ventes.models import Client

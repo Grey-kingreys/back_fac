@@ -41,37 +41,75 @@ class EmployeDetailSerializer(serializers.ModelSerializer):
 class PresenceSerializer(serializers.ModelSerializer):
     type_label = serializers.CharField(source='get_type_presence_display', read_only=True)
     employe_nom = serializers.CharField(source='employe.nom_complet', read_only=True)
+    depot_nom = serializers.CharField(source='employe.depot.name', read_only=True)
+    reference_geo_label = serializers.CharField(
+        source='get_reference_geo_display', read_only=True)
 
     class Meta:
         model = Presence
-        fields = ['id', 'employe', 'employe_nom', 'date', 'type_presence', 'type_label',
-                  'heure_arrivee', 'heure_depart', 'observations', 'enregistre_par']
-        read_only_fields = ['id', 'type_label', 'employe_nom', 'enregistre_par']
+        fields = ['id', 'employe', 'employe_nom', 'depot_nom', 'date',
+                  'type_presence', 'type_label',
+                  'heure_arrivee', 'heure_depart', 'observations',
+                  'latitude', 'longitude', 'distance_m', 'dans_perimetre',
+                  'reference_geo', 'reference_geo_label', 'enregistre_par']
+        read_only_fields = ['id', 'type_label', 'employe_nom', 'depot_nom',
+                            'reference_geo_label', 'enregistre_par']
 
     def create(self, validated_data):
         validated_data['enregistre_par'] = self.context['request'].user
         return super().create(validated_data)
 
 
+class PresencePointerSerializer(serializers.Serializer):
+    """Saisie self-service du pointage : seule la position est transmise."""
+    latitude = serializers.DecimalField(max_digits=9, decimal_places=6)
+    longitude = serializers.DecimalField(max_digits=9, decimal_places=6)
+    observations = serializers.CharField(required=False, allow_blank=True)
+
+
 class CongeSerializer(serializers.ModelSerializer):
     type_label = serializers.CharField(source='get_type_conge_display', read_only=True)
     statut_label = serializers.CharField(source='get_statut_display', read_only=True)
     employe_nom = serializers.CharField(source='employe.nom_complet', read_only=True)
+    depot_nom = serializers.CharField(source='employe.depot.name', read_only=True)
+    demande_par_nom = serializers.CharField(
+        source='demande_par.get_full_name', read_only=True)
+    approuve_par_nom = serializers.CharField(
+        source='approuve_par.get_full_name', read_only=True)
     nb_jours = serializers.IntegerField(read_only=True)
 
     class Meta:
         model = Conge
-        fields = ['id', 'employe', 'employe_nom', 'type_conge', 'type_label',
+        fields = ['id', 'employe', 'employe_nom', 'depot_nom',
+                  'type_conge', 'type_label',
                   'date_debut', 'date_fin', 'nb_jours', 'statut', 'statut_label',
-                  'motif', 'approuve_par', 'created_at']
+                  'motif', 'demande_par', 'demande_par_nom',
+                  'approuve_par', 'approuve_par_nom', 'motif_traitement',
+                  'traite_le', 'created_at']
         read_only_fields = ['id', 'type_label', 'statut_label', 'employe_nom',
-                            'nb_jours', 'approuve_par', 'created_at']
+                            'depot_nom', 'nb_jours', 'demande_par', 'demande_par_nom',
+                            'approuve_par', 'approuve_par_nom', 'motif_traitement',
+                            'traite_le', 'created_at']
 
     def validate(self, data):
         if data.get('date_fin') and data.get('date_debut'):
             if data['date_fin'] < data['date_debut']:
                 raise serializers.ValidationError(
                     "La date de fin doit être après la date de début.")
+        return data
+
+
+class CongeDemandeSerializer(serializers.ModelSerializer):
+    """Demande de congé self-service : l'employé est déduit du compte connecté."""
+
+    class Meta:
+        model = Conge
+        fields = ['type_conge', 'date_debut', 'date_fin', 'motif']
+
+    def validate(self, data):
+        if data['date_fin'] < data['date_debut']:
+            raise serializers.ValidationError(
+                "La date de fin doit être après la date de début.")
         return data
 
 

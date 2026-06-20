@@ -77,6 +77,19 @@ class CaissePhysiqueSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'depot_nom', 'solde_actuel', 'statut', 'statut_label',
                             'is_active', 'created_at', 'fermee_le']
 
+    def validate(self, attrs):
+        # Au plus une caisse OUVERTE par dépôt (les fermées restent en base, §1).
+        depot = attrs.get('depot')
+        if self.instance is None and depot is not None:
+            if CaissePhysique.objects.filter(
+                depot=depot, statut=CaissePhysique.Statut.OUVERTE
+            ).exists():
+                raise serializers.ValidationError(
+                    {'depot': "Ce dépôt a déjà une caisse ouverte. "
+                              "Fermez-la avant d'en créer une nouvelle."}
+                )
+        return attrs
+
     def create(self, validated_data):
         validated_data['company'] = self.context['request'].user.company
         return super().create(validated_data)
@@ -220,6 +233,19 @@ class CaisseZoneSerializer(serializers.ModelSerializer):
                   'solde_actuel', 'statut', 'statut_label', 'is_active', 'created_at', 'fermee_le']
         read_only_fields = ['id', 'zone_nom', 'solde_actuel', 'statut', 'statut_label',
                             'is_active', 'created_at', 'fermee_le']
+
+    def validate(self, attrs):
+        # Au plus une caisse zone OUVERTE par zone (les fermées restent en base, §1).
+        zone = attrs.get('zone')
+        if self.instance is None and zone is not None:
+            if CaisseZone.objects.filter(
+                zone=zone, statut=CaisseZone.Statut.OUVERTE
+            ).exists():
+                raise serializers.ValidationError(
+                    {'zone': "Cette zone a déjà une caisse ouverte. "
+                             "Fermez-la avant d'en créer une nouvelle."}
+                )
+        return attrs
 
     def create(self, validated_data):
         validated_data['company'] = self.context['request'].user.company

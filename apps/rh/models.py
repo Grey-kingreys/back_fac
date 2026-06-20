@@ -71,6 +71,11 @@ class Presence(models.Model):
         RETARD = 'retard', _("Retard")
         MISSION = 'mission', _("En mission")
 
+    class ReferenceGeo(models.TextChoices):
+        DEPOT = 'depot', _("Dépôt")
+        ZONE = 'zone', _("Zone")
+        AUCUNE = 'aucune', _("Aucune référence")
+
     employe = models.ForeignKey(
         Employe, on_delete=models.CASCADE,
         related_name='presences', verbose_name=_("Employé"),
@@ -82,6 +87,28 @@ class Presence(models.Model):
     heure_arrivee = models.TimeField(_("Heure d'arrivée"), null=True, blank=True)
     heure_depart = models.TimeField(_("Heure de départ"), null=True, blank=True)
     observations = models.TextField(_("Observations"), blank=True)
+
+    # ── Géolocalisation du pointage (self-service + géofencing) ──────────────
+    latitude = models.DecimalField(
+        _("Latitude du pointage"), max_digits=9, decimal_places=6,
+        null=True, blank=True,
+    )
+    longitude = models.DecimalField(
+        _("Longitude du pointage"), max_digits=9, decimal_places=6,
+        null=True, blank=True,
+    )
+    distance_m = models.PositiveIntegerField(
+        _("Distance au point de référence (m)"), null=True, blank=True,
+    )
+    dans_perimetre = models.BooleanField(
+        _("Dans le périmètre"), null=True, blank=True,
+        help_text="True si le pointage est dans le rayon autorisé autour du dépôt/zone.",
+    )
+    reference_geo = models.CharField(
+        _("Point de référence"), max_length=10,
+        choices=ReferenceGeo.choices, blank=True,
+    )
+
     enregistre_par = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True,
         related_name='presences_enregistrees',
@@ -130,10 +157,19 @@ class Conge(models.Model):
         _("Statut"), max_length=20, choices=Statut.choices, default=Statut.EN_ATTENTE,
     )
     motif = models.TextField(_("Motif"), blank=True)
+    demande_par = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='conges_demandes', verbose_name=_("Demandé par"),
+    )
     approuve_par = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
         related_name='conges_approuves',
     )
+    motif_traitement = models.TextField(
+        _("Motif de la décision"), blank=True,
+        help_text="Commentaire de l'admin/superviseur à l'approbation ou au refus.",
+    )
+    traite_le = models.DateTimeField(_("Traité le"), null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
