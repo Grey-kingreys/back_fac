@@ -6,6 +6,30 @@
 
 ---
 
+## ➕ Vente payée en Mobile Money → compte crédité + transaction tracée (20/06/2026) — ⚠️ migration `ventes/0004` à déployer
+
+**Besoin métier (CDC §3.6)** : un paiement de vente en Orange/MTN Money doit créditer un **compte
+mobile money précis** du dépôt et tracer la transaction opérateur (ID obligatoire). Avant, `Paiement`
+n'avait qu'une `reference` texte libre — aucun lien compte, aucun crédit de solde.
+
+**Correctif** :
+- `Paiement.compte_mobile_money` : FK nullable `→ finance.CompteMobileMoney` (`on_delete=PROTECT`,
+  `related_name='paiements_ventes'`). Migration **`ventes/0004_paiement_compte_mobile_money`** (écrite à
+  la main, dépend de `finance/0001`).
+- `CommandeCreateSerializer` + `PaiementInputSerializer` : champ `compte_mobile_money` (IntegerField). La
+  référence reste obligatoire pour {orange, mtn, virement} ; **le compte devient obligatoire pour
+  {orange_money, mtn_money}** (validate()).
+- `ventes/views.py` : helper `_resolve_compte_mobile_money(company, id, mode)` — vérifie appartenance
+  entreprise + compte actif + **opérateur cohérent** avec le mode (`compte.operateur == mode`, les valeurs
+  `Operateur` == valeurs `Paiement.Mode`). Utilisé par `create` et `ajouter_paiement`.
+- `services.enregistrer_paiement(..., compte_mobile_money=None)` : si mode ∈ {orange, mtn} + compte →
+  crée une `TransactionMobileMoney(type=PAIEMENT_RECU, reference_operateur=reference, reference_doc=numero)`
+  **et crédite `compte.solde`**. `creer_commande` propage le param.
+- `PaiementSerializer` expose `compte_mobile_money` + `compte_mobile_money_numero` (lecture seule).
+- Picker front : `GET /comptes-mobile-money/` (déjà géo-scopé par dépôt) filtré client-side par opérateur.
+  ⚠️ `FINANCE_READ` n'inclut **pas** commercial → pour lui le picker est vide (backend accepte quand même
+  via la résolution directe). Tests ventes inchangés (n'utilisent qu'ESPECES). → `git pull && docker compose up -d --build`.
+
 ## ➕ RH : « employés = utilisateurs » — auto-provision + récap user-based (20/06/2026) — pas de migration
 
 Clarification métier : **les employés sont les utilisateurs de l'entreprise**. Conséquences (`apps/rh/views.py`) :

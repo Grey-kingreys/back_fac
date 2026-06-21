@@ -124,8 +124,9 @@ class TestUserCreate:
         data.update(kwargs)
         return data
 
-    def test_admin_cree_user(self, client_admin_a, company_a):
-        res = client_admin_a.post(USERS_URL, self.get_payload())
+    def test_admin_cree_user(self, client_admin_a, company_a, depot_a):
+        # role COMMERCIAL ∈ DEPOT_BOUND_ROLES → depot_id obligatoire (règle 20/06)
+        res = client_admin_a.post(USERS_URL, self.get_payload(depot_id=depot_a.id))
         assert res.status_code == status.HTTP_201_CREATED
         assert CustomUser.objects.filter(email="nouveau@test.com").exists()
         # Vérifie que l'user est bien rattaché à la company de l'admin
